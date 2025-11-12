@@ -27,6 +27,11 @@ export enum Screen {
   ABOUT,
 }
 
+export interface Landlord {
+  id: number;
+  name: string;
+}
+
 export interface Property {
   id: number;
   title: string;
@@ -37,8 +42,10 @@ export interface Property {
   imageUrl: string;
   description: string;
   images: string[];
-  status: 'Available' | 'Rented';
-  landlordName?: string;
+  status: 'Available' | 'Rented' | 'Pending' | 'Under Maintenance';
+  landlordId: number;
+  landlordName: string;
+  phoneNumber?: string;
 }
 
 export interface Message {
@@ -69,4 +76,6 @@ export interface AppContextType {
   setUserRole: (role: UserRole) => void;
   selectedProperty: Property | null;
   setSelectedProperty: (property: Property | null) => void;
+  isAuthenticated: boolean;
+  setIsAuthenticated: (isAuthenticated: boolean) => void;
 }

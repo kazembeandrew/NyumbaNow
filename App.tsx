@@ -20,9 +20,11 @@ export const useAppContext = () => {
 };
 
 const App: React.FC = () => {
-  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.SPLASH);
+  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.TENANT_HOME);
   const [userRole, setUserRole] = useState<UserRole>(UserRole.NONE);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+
 
   const contextValue: AppContextType = {
     currentScreen,
@@ -31,12 +33,12 @@ const App: React.FC = () => {
     setUserRole,
     selectedProperty,
     setSelectedProperty,
+    isAuthenticated,
+    setIsAuthenticated,
   };
 
   const renderScreen = () => {
     switch (currentScreen) {
-      case Screen.SPLASH:
-        return <SplashScreen />;
       case Screen.LOGIN:
         return <LoginScreen />;
       case Screen.ROLE_SELECTION:
@@ -72,11 +74,13 @@ const App: React.FC = () => {
       case Screen.ABOUT:
           return <AboutScreen />;
       default:
-        return <LoginScreen />;
+        return <TenantHomeScreen />;
     }
   };
 
   const showNavBar = () => {
+    if (!isAuthenticated) return false;
+
     const tenantScreens = [Screen.TENANT_HOME, Screen.FAVORITES, Screen.MESSAGES, Screen.TENANT_PROFILE];
     const landlordScreens = [Screen.LANDLORD_DASHBOARD, Screen.MANAGE_PROPERTIES, Screen.MESSAGES];
     const agentScreens = [Screen.AGENT_DASHBOARD, Screen.AGENT_PROPERTY_MANAGEMENT, Screen.AGENT_PROFILE];
@@ -92,7 +96,7 @@ const App: React.FC = () => {
     <AppContext.Provider value={contextValue}>
       <div className="bg-gray-200 flex justify-center items-center h-screen font-sans">
         <div className="w-full max-w-sm h-full bg-secondary shadow-lg overflow-hidden flex flex-col relative md:max-h-[844px] md:rounded-lg">
-          <div className="flex-grow overflow-y-auto">
+          <div className="flex-grow overflow-y-auto scrollbar-hide">
             {renderScreen()}
           </div>
           {showNavBar() && <BottomNavBar />}
