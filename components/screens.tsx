@@ -198,12 +198,17 @@ export const PropertyDetailsScreen: React.FC = () => {
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [isFavorite, setIsFavorite] = useState(false);
     const [touchStartX, setTouchStartX] = useState<number | null>(null);
+    const [isImageLoading, setIsImageLoading] = useState(true);
 
     useEffect(() => {
         if (!selectedProperty) {
             setCurrentScreen(Screen.TENANT_HOME);
         }
     }, [selectedProperty, setCurrentScreen]);
+    
+    useEffect(() => {
+        setIsImageLoading(true);
+    }, [currentImageIndex]);
 
     if (!selectedProperty) {
         return null; // Or a loading/error state
@@ -229,13 +234,10 @@ export const PropertyDetailsScreen: React.FC = () => {
         const touchEndX = e.changedTouches[0].clientX;
         const diff = touchStartX - touchEndX;
 
-        // Threshold for swipe detection
         if (Math.abs(diff) > 50) {
             if (diff > 0) {
-                // Swiped left
                 nextImage();
             } else {
-                // Swiped right
                 prevImage();
             }
         }
@@ -245,14 +247,20 @@ export const PropertyDetailsScreen: React.FC = () => {
     return (
         <div className="bg-secondary min-h-full">
             <div 
-                className="relative w-full h-64 bg-gray-200"
+                className="relative w-full h-64 bg-gray-300"
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
             >
+                {isImageLoading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-300 animate-pulse">
+                        <NyumbaNowLogo className="w-12 h-12 text-gray-400" />
+                    </div>
+                )}
                 <img 
                     src={images[currentImageIndex]} 
                     alt={`${selectedProperty.title} ${currentImageIndex + 1}`} 
-                    className="w-full h-full object-cover select-none"
+                    className={`w-full h-full object-cover select-none transition-opacity duration-300 ${isImageLoading ? 'opacity-0' : 'opacity-100'}`}
+                    onLoad={() => setIsImageLoading(false)}
                     aria-live="polite"
                 />
                 
