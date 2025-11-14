@@ -1,11 +1,12 @@
 
+
 import React, { useState, createContext, useContext } from 'react';
-import { Screen, UserRole, Property, AppContextType } from './types';
+import { Screen, UserRole, Listing, AppContextType } from './types';
 import { 
-  SplashScreen, LoginScreen, RoleSelectionScreen, TenantHomeScreen, PropertyDetailsScreen,
-  FavoritesScreen, MessagesScreen, TenantProfileScreen, LandlordDashboardScreen, AddPropertyScreen,
-  ManagePropertiesScreen, AgentDashboardScreen, AgentProfileScreen, AgentPropertyManagementScreen,
-  NotificationsScreen, RulesAndPoliciesScreen, SettingsScreen, AboutScreen
+  SplashScreen, LoginScreen, RoleSelectionScreen, HomeScreen, ListingDetailsScreen,
+  FavoritesScreen, MessagesScreen, ProfileScreen, DashboardScreen, AddListingScreen,
+  ManageListingsScreen, NotificationsScreen, RulesAndPoliciesScreen, SettingsScreen, 
+  AboutScreen, EditProfileScreen
 } from './components/screens';
 import { BottomNavBar } from './components/ui';
 
@@ -20,10 +21,12 @@ export const useAppContext = () => {
 };
 
 const App: React.FC = () => {
-  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.TENANT_HOME);
+  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.SPLASH);
   const [userRole, setUserRole] = useState<UserRole>(UserRole.NONE);
-  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
+  const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [postLoginRedirect, setPostLoginRedirect] = useState<Screen | null>(null);
+  const [listingToEdit, setListingToEdit] = useState<Listing | null>(null);
 
 
   const contextValue: AppContextType = {
@@ -31,63 +34,63 @@ const App: React.FC = () => {
     setCurrentScreen,
     userRole,
     setUserRole,
-    selectedProperty,
-    setSelectedProperty,
+    selectedListing,
+    setSelectedListing,
     isAuthenticated,
     setIsAuthenticated,
+    postLoginRedirect,
+    setPostLoginRedirect,
+    listingToEdit,
+    setListingToEdit,
   };
 
   const renderScreen = () => {
     switch (currentScreen) {
+      case Screen.SPLASH:
+        return <SplashScreen />;
       case Screen.LOGIN:
         return <LoginScreen />;
       case Screen.ROLE_SELECTION:
         return <RoleSelectionScreen />;
-      case Screen.TENANT_HOME:
-        return <TenantHomeScreen />;
-      case Screen.PROPERTY_DETAILS:
-        return <PropertyDetailsScreen />;
+      case Screen.HOME_SCREEN:
+        return <HomeScreen />;
+      case Screen.LISTING_DETAILS:
+        return <ListingDetailsScreen />;
       case Screen.FAVORITES:
         return <FavoritesScreen />;
       case Screen.MESSAGES:
         return <MessagesScreen />;
-      case Screen.TENANT_PROFILE:
-        return <TenantProfileScreen />;
-      case Screen.LANDLORD_DASHBOARD:
-          return <LandlordDashboardScreen />;
-      case Screen.ADD_PROPERTY:
-          return <AddPropertyScreen />;
-      case Screen.MANAGE_PROPERTIES:
-          return <ManagePropertiesScreen />;
-      case Screen.AGENT_DASHBOARD:
-          return <AgentDashboardScreen />;
-      case Screen.AGENT_PROFILE:
-          return <AgentProfileScreen />;
-      case Screen.AGENT_PROPERTY_MANAGEMENT:
-          return <AgentPropertyManagementScreen />;
+      case Screen.PROFILE:
+        return <ProfileScreen />;
+      case Screen.DASHBOARD:
+          return <DashboardScreen />;
+      case Screen.ADD_LISTING:
+          return <AddListingScreen />;
+      case Screen.MANAGE_LISTINGS:
+          return <ManageListingsScreen />;
       case Screen.NOTIFICATIONS:
           return <NotificationsScreen />;
       case Screen.RULES_AND_POLICIES:
           return <RulesAndPoliciesScreen />;
       case Screen.SETTINGS:
           return <SettingsScreen />;
+      case Screen.EDIT_PROFILE:
+          return <EditProfileScreen />;
       case Screen.ABOUT:
           return <AboutScreen />;
       default:
-        return <TenantHomeScreen />;
+        return <HomeScreen />;
     }
   };
 
   const showNavBar = () => {
     if (!isAuthenticated) return false;
 
-    const tenantScreens = [Screen.TENANT_HOME, Screen.FAVORITES, Screen.MESSAGES, Screen.TENANT_PROFILE];
-    const landlordScreens = [Screen.LANDLORD_DASHBOARD, Screen.MANAGE_PROPERTIES, Screen.MESSAGES];
-    const agentScreens = [Screen.AGENT_DASHBOARD, Screen.AGENT_PROPERTY_MANAGEMENT, Screen.AGENT_PROFILE];
+    const buyerScreens = [Screen.HOME_SCREEN, Screen.FAVORITES, Screen.MESSAGES, Screen.PROFILE];
+    const sellerScreens = [Screen.DASHBOARD, Screen.MANAGE_LISTINGS, Screen.MESSAGES, Screen.PROFILE];
 
-    if (userRole === UserRole.TENANT && tenantScreens.includes(currentScreen)) return true;
-    if (userRole === UserRole.LANDLORD && landlordScreens.includes(currentScreen)) return true;
-    if (userRole === UserRole.AGENT && agentScreens.includes(currentScreen)) return true;
+    if (userRole === UserRole.BUYER && buyerScreens.includes(currentScreen)) return true;
+    if (userRole === UserRole.SELLER && sellerScreens.includes(currentScreen)) return true;
     
     return false;
   };

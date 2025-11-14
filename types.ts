@@ -1,8 +1,8 @@
 
+
 export enum UserRole {
-  TENANT = 'Tenant',
-  LANDLORD = 'Landlord',
-  AGENT = 'Agent',
+  BUYER = 'Buyer',
+  SELLER = 'Seller',
   NONE = 'None',
 }
 
@@ -10,20 +10,18 @@ export enum Screen {
   SPLASH,
   LOGIN,
   ROLE_SELECTION,
-  TENANT_HOME,
-  PROPERTY_DETAILS,
+  HOME_SCREEN,
+  LISTING_DETAILS,
   FAVORITES,
   MESSAGES,
-  TENANT_PROFILE,
-  LANDLORD_DASHBOARD,
-  ADD_PROPERTY,
-  MANAGE_PROPERTIES,
-  AGENT_DASHBOARD,
-  AGENT_PROFILE,
-  AGENT_PROPERTY_MANAGEMENT,
+  PROFILE,
+  DASHBOARD,
+  ADD_LISTING,
+  MANAGE_LISTINGS,
   NOTIFICATIONS,
   RULES_AND_POLICIES,
   SETTINGS,
+  EDIT_PROFILE,
   ABOUT,
 }
 
@@ -32,20 +30,45 @@ export interface Landlord {
   name: string;
 }
 
-export interface Property {
+export interface Review {
+  id: number;
+  authorName: string;
+  authorImageUrl?: string;
+  rating: number; // 1-5
+  comment: string;
+  timestamp: string;
+}
+
+export enum ListingCategory {
+  HOUSE_RENTAL = 'House Rentals',
+  BEDROOM_RENTAL = 'Bedroom Rentals',
+  EVENT_VENUE_HIRE = 'Event Venues',
+  CAR_HIRE = 'Car Hire',
+  EQUIPMENT_HIRE = 'Equipment Hire',
+  LAND_SALE = 'Land for Sale',
+  HOUSE_SALE = 'Houses for Sale',
+  CAR_SALE = 'Cars for Sale',
+  ELECTRONICS_SALE = 'Electronics for Sale',
+}
+
+export interface Listing {
   id: number;
   title: string;
   price: number;
+  priceType: 'per month' | 'per day' | 'one-time';
   location: string;
-  bedrooms: number;
-  bathrooms: number;
   imageUrl: string;
   description: string;
   images: string[];
-  status: 'Available' | 'Rented' | 'Pending' | 'Under Maintenance';
-  landlordId: number;
-  landlordName: string;
+  status: 'Available' | 'Rented' | 'Pending' | 'Under Maintenance' | 'Sold';
+  sellerId: number;
+  sellerName: string;
+  category: ListingCategory;
+  bedrooms?: number;
+  bathrooms?: number;
   phoneNumber?: string;
+  email?: string;
+  reviews?: Review[];
 }
 
 export interface Message {
@@ -74,8 +97,12 @@ export interface AppContextType {
   setCurrentScreen: (screen: Screen) => void;
   userRole: UserRole;
   setUserRole: (role: UserRole) => void;
-  selectedProperty: Property | null;
-  setSelectedProperty: (property: Property | null) => void;
+  selectedListing: Listing | null;
+  setSelectedListing: (listing: Listing | null) => void;
   isAuthenticated: boolean;
   setIsAuthenticated: (isAuthenticated: boolean) => void;
+  postLoginRedirect: Screen | null;
+  setPostLoginRedirect: (screen: Screen | null) => void;
+  listingToEdit: Listing | null;
+  setListingToEdit: (listing: Listing | null) => void;
 }

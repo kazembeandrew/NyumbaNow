@@ -1,9 +1,27 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '../App';
-import { Screen, UserRole, Property } from '../types';
-import { MOCK_PROPERTIES, MOCK_CONVERSATIONS, MOCK_MESSAGES, MOCK_NOTIFICATIONS, NyumbaNowLogo, HeartIcon, MessageSquareIcon, BellIcon, UserIcon, ChevronLeftIcon, MapPinIcon, BedIcon, BathIcon, MapIcon, ListIcon, PhoneIcon, SendIcon, ChevronRightIcon, SettingsIcon, FileTextIcon, InfoIcon, LogOutIcon, PlusCircleIcon, CameraIcon, BuildingIcon, CalendarIcon, LoaderIcon, ArrowDownIcon, ShareIcon } from '../constants';
-import { Button, PropertyCard, Header, RecommendedPropertyCard } from './ui';
+import { Screen, UserRole, Listing, Review, ListingCategory } from '../types';
+import { MOCK_LISTINGS, MOCK_LANDLORDS, MOCK_CONVERSATIONS, MOCK_MESSAGES, MOCK_NOTIFICATIONS, MarketPaLineLogo, HeartIcon, MessageSquareIcon, BellIcon, UserIcon, ChevronLeftIcon, MapPinIcon, BedIcon, BathIcon, MapIcon, ListIcon, PhoneIcon, SendIcon, ChevronRightIcon, SettingsIcon, FileTextIcon, InfoIcon, LogOutIcon, PlusCircleIcon, CameraIcon, BuildingIcon, CalendarIcon, LoaderIcon, ArrowDownIcon, ShareIcon, SortIcon, ChevronDownIcon, StarIcon, MailIcon, HouseIcon, CarIcon, BriefcaseIcon, TagIcon, CalendarDaysIcon, WifiIcon, ShieldIcon, ZapIcon, DropletIcon, GoogleIcon, FacebookIcon } from '../constants';
+import { Button, ListingCard, Header, RecommendedListingCard, StarRating, ReviewCard } from './ui';
+
+// --- Reusable Form Field Components ---
+
+const InputField = ({ label, id, ...props }: {label: string, id: string} & React.InputHTMLAttributes<HTMLInputElement>) => (
+    <div className="mb-4">
+        <label htmlFor={id} className="block text-sm font-medium text-text-secondary mb-1">{label}</label>
+        <input id={id} {...props} className="w-full px-4 py-3 rounded-lg border border-border-soft focus:ring-primary focus:border-primary" />
+    </div>
+);
+
+const TextAreaField = ({ label, id, ...props }: {label: string, id: string} & React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
+    <div className="mb-4">
+        <label htmlFor={id} className="block text-sm font-medium text-text-secondary mb-1">{label}</label>
+        <textarea id={id} {...props} className="w-full px-4 py-3 rounded-lg border border-border-soft focus:ring-primary focus:border-primary h-28 resize-none"></textarea>
+    </div>
+);
+
 
 // --- Screen Components ---
 
@@ -12,8 +30,9 @@ export const SplashScreen: React.FC = () => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setCurrentScreen(Screen.LOGIN);
-    }, 3000); // Increased timer to allow animation to complete
+      // For a real app, you might check for an existing session here
+      setCurrentScreen(Screen.HOME_SCREEN);
+    }, 3000); 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -21,22 +40,26 @@ export const SplashScreen: React.FC = () => {
   return (
     <div className="flex flex-col items-center justify-center h-full bg-white overflow-hidden">
         <div className="w-24 h-24 mb-4">
-            <svg className="w-full h-full splash-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="transparent" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="#009639"></path>
-                <polyline points="9 22 9 12 15 12 15 22" stroke="#009639"></polyline>
-            </svg>
+             <MarketPaLineLogo className="w-full h-full splash-logo" stroke="#009639" />
         </div>
-      <h1 id="splash-title" className="text-4xl font-bold font-heading text-text-primary splash-text">NyumbaNow</h1>
-      <p id="splash-subtitle" className="text-lg text-text-secondary mt-2 splash-text">Find your home today</p>
+      <h1 id="splash-title" className="text-4xl font-bold font-heading text-text-primary splash-text">MarketPaLine</h1>
+      <p id="splash-subtitle" className="text-lg text-text-secondary mt-2 splash-text">Buy, sell, and rent anything in Malawi.</p>
     </div>
   );
 };
 
 export const LoginScreen: React.FC = () => {
-    const { setCurrentScreen, setIsAuthenticated } = useAppContext();
+    const { setCurrentScreen, setIsAuthenticated, userRole } = useAppContext();
     const handleLogin = () => {
         setIsAuthenticated(true);
-        setCurrentScreen(Screen.ROLE_SELECTION);
+        // If user already selected a role, go to their home screen, otherwise let them choose.
+        if (userRole === UserRole.NONE) {
+            setCurrentScreen(Screen.ROLE_SELECTION);
+        } else if (userRole === UserRole.BUYER) {
+            setCurrentScreen(Screen.HOME_SCREEN);
+        } else {
+            setCurrentScreen(Screen.DASHBOARD);
+        }
     };
     return (
         <div className="p-8 flex flex-col justify-center h-full bg-secondary">
@@ -44,46 +67,73 @@ export const LoginScreen: React.FC = () => {
             <p className="text-text-secondary mb-8">Enter your phone number to continue.</p>
             <div className="mb-4">
                 <label htmlFor="phone" className="block text-sm font-medium text-text-secondary mb-1">Phone Number</label>
-                <input 
-                    type="tel" 
-                    id="phone" 
-                    placeholder="+265 123 456 789" 
-                    className="w-full px-4 py-3 rounded-lg border border-border-soft focus:ring-primary focus:border-primary"
-                />
+                <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <PhoneIcon className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input 
+                        type="tel" 
+                        id="phone" 
+                        placeholder="+265 991 234 567" 
+                        className="w-full pl-10 pr-4 py-3 rounded-lg border border-border-soft focus:ring-primary focus:border-primary"
+                    />
+                </div>
             </div>
             <Button onClick={handleLogin}>Continue</Button>
+
+            <div className="my-6 flex items-center">
+                <div className="flex-grow border-t border-border-soft"></div>
+                <span className="flex-shrink mx-4 text-text-secondary text-sm">OR</span>
+                <div className="flex-grow border-t border-border-soft"></div>
+            </div>
+
+            <div className="space-y-3">
+                 <button onClick={handleLogin} className="w-full py-3 rounded-lg font-heading font-semibold transition-colors duration-300 text-center bg-white border border-border-soft text-text-primary hover:bg-gray-50 flex items-center justify-center">
+                    <GoogleIcon className="w-5 h-5 mr-3" />
+                    <span className="font-semibold">Continue with Google</span>
+                </button>
+                <button onClick={handleLogin} className="w-full py-3 rounded-lg font-heading font-semibold transition-colors duration-300 text-center bg-[#1877F2] text-white border border-[#1877F2] hover:bg-[#166fe5] flex items-center justify-center">
+                    <FacebookIcon className="w-5 h-5 mr-3" />
+                    <span className="font-semibold">Continue with Facebook</span>
+                </button>
+            </div>
+
             <p className="text-center text-sm text-text-secondary mt-6">
-                Don't have an account? <a href="#" className="font-semibold text-primary">Register</a>
+                Don't have an account? <a href="#" onClick={(e) => { e.preventDefault(); handleLogin(); }} className="font-semibold text-primary">Register</a>
             </p>
         </div>
     );
 };
 
 export const RoleSelectionScreen: React.FC = () => {
-    const { setUserRole, setCurrentScreen } = useAppContext();
+    const { setUserRole, setCurrentScreen, postLoginRedirect, setPostLoginRedirect } = useAppContext();
     const selectRole = (role: UserRole) => {
         setUserRole(role);
+
+        let destination: Screen = Screen.HOME_SCREEN; // A safe default
         switch (role) {
-            case UserRole.TENANT:
-                setCurrentScreen(Screen.TENANT_HOME);
+            case UserRole.BUYER:
+                destination = postLoginRedirect || Screen.HOME_SCREEN;
                 break;
-            case UserRole.LANDLORD:
-                setCurrentScreen(Screen.LANDLORD_DASHBOARD);
+            case UserRole.SELLER:
+                destination = Screen.DASHBOARD;
                 break;
-            case UserRole.AGENT:
-                setCurrentScreen(Screen.AGENT_DASHBOARD);
-                break;
+        }
+
+        setCurrentScreen(destination);
+        
+        if (postLoginRedirect) {
+            setPostLoginRedirect(null);
         }
     };
 
     return (
         <div className="p-8 flex flex-col justify-center h-full bg-secondary">
             <h1 className="font-heading text-2xl font-bold text-center mb-2">Choose Your Role</h1>
-            <p className="text-text-secondary text-center mb-8">How will you be using NyumbaNow?</p>
+            <p className="text-text-secondary text-center mb-8">How will you be using MarketPaLine?</p>
             <div className="space-y-4">
-                <Button onClick={() => selectRole(UserRole.TENANT)}>I'm a Tenant</Button>
-                <Button onClick={() => selectRole(UserRole.LANDLORD)} variant="outline">I'm a Landlord</Button>
-                <Button onClick={() => selectRole(UserRole.AGENT)} variant="outline">I'm an Agent</Button>
+                <Button onClick={() => selectRole(UserRole.BUYER)}>I want to Buy or Rent</Button>
+                <Button onClick={() => selectRole(UserRole.SELLER)} variant="outline">I want to Sell or Hire Out</Button>
             </div>
         </div>
     );
@@ -97,16 +147,16 @@ const MOCK_COORDINATES = [
 ];
 
 const MapView: React.FC = () => {
-    const { setSelectedProperty, setCurrentScreen } = useAppContext();
-    const [activeProperty, setActiveProperty] = useState<Property | null>(null);
+    const { setSelectedListing, setCurrentScreen } = useAppContext();
+    const [activeListing, setActiveListing] = useState<Listing | null>(null);
 
-    const handlePinClick = (property: Property) => {
-        setActiveProperty(property);
+    const handlePinClick = (listing: Listing) => {
+        setActiveListing(listing);
     };
     
-    const handleCardClick = (property: Property) => {
-        setSelectedProperty(property);
-        setCurrentScreen(Screen.PROPERTY_DETAILS);
+    const handleCardClick = (listing: Listing) => {
+        setSelectedListing(listing);
+        setCurrentScreen(Screen.LISTING_DETAILS);
     }
 
     return (
@@ -115,40 +165,110 @@ const MapView: React.FC = () => {
                 <img src="https://static.vecteezy.com/system/resources/thumbnails/003/399/485/small/map-of-the-city-with-streets-and-districts-vector.jpg" className="w-full h-full object-cover opacity-50" alt="City Map"/>
             </div>
             
-            {MOCK_PROPERTIES.map((property, index) => (
+            {MOCK_LISTINGS.map((listing, index) => (
                 <button 
-                    key={property.id} 
+                    key={listing.id} 
                     className="absolute transform -translate-x-1/2 -translate-y-1/2"
                     style={MOCK_COORDINATES[index % MOCK_COORDINATES.length]}
-                    onClick={() => handlePinClick(property)}
-                    aria-label={`View details for ${property.title}`}
+                    onClick={() => handlePinClick(listing)}
+                    aria-label={`View details for ${listing.title}`}
                 >
-                    <div className={`p-1 rounded-full shadow-lg transition-transform ${activeProperty?.id === property.id ? 'bg-primary scale-125' : 'bg-white'}`}>
-                        <MapPinIcon className={`w-5 h-5 ${activeProperty?.id === property.id ? 'text-white' : 'text-primary'}`} />
+                    <div className={`p-1 rounded-full shadow-lg transition-transform ${activeListing?.id === listing.id ? 'bg-primary scale-125' : 'bg-white'}`}>
+                        <MapPinIcon className={`w-5 h-5 ${activeListing?.id === listing.id ? 'text-white' : 'text-primary'}`} />
                     </div>
                 </button>
             ))}
             
-            {activeProperty && (
+            {activeListing && (
                 <div className="absolute bottom-4 left-4 right-4 z-10 animate-fade-in-up">
-                   <RecommendedPropertyCard property={activeProperty} onClick={() => handleCardClick(activeProperty)} />
+                   <RecommendedListingCard listing={activeListing} onClick={() => handleCardClick(activeListing)} />
                 </div>
             )}
         </div>
     );
 };
 
-export const TenantHomeScreen: React.FC = () => {
-    const { setCurrentScreen, setSelectedProperty, isAuthenticated } = useAppContext();
+export const HomeScreen: React.FC = () => {
+    const { setCurrentScreen, setSelectedListing, isAuthenticated } = useAppContext();
     const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
-    const [properties, setProperties] = useState(MOCK_PROPERTIES);
+    const [listings, setListings] = useState(MOCK_LISTINGS);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [pullPosition, setPullPosition] = useState(0);
     const scrollRef = useRef<HTMLDivElement>(null);
     const pullStartRef = useRef<number | null>(null);
 
+    type SortOption = 'recent' | 'price-asc' | 'price-desc';
+    const [sortOption, setSortOption] = useState<SortOption>('recent');
+    const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+    const sortMenuRef = useRef<HTMLDivElement>(null);
+
+    const [selectedCategory, setSelectedCategory] = useState<ListingCategory | 'all'>('all');
+    
+    const [searchQuery, setSearchQuery] = useState('');
+
     const PULL_THRESHOLD = 80;
     const PULL_RESISTANCE = 0.5;
+    
+    const categories = [
+        { name: 'Houses', icon: HouseIcon, category: ListingCategory.HOUSE_RENTAL },
+        { name: 'For Sale', icon: TagIcon, category: ListingCategory.HOUSE_SALE }, // Simplified for UI
+        { name: 'Cars', icon: CarIcon, category: ListingCategory.CAR_HIRE },
+        { name: 'Venues', icon: CalendarDaysIcon, category: ListingCategory.EVENT_VENUE_HIRE },
+        { name: 'Equipment', icon: BriefcaseIcon, category: ListingCategory.EQUIPMENT_HIRE },
+    ];
+
+    useEffect(() => {
+        let processedListings = [...MOCK_LISTINGS];
+
+        // Filter by category
+        if (selectedCategory !== 'all') {
+            if (selectedCategory === ListingCategory.HOUSE_SALE) {
+                 processedListings = processedListings.filter(p => [ListingCategory.HOUSE_SALE, ListingCategory.LAND_SALE, ListingCategory.CAR_SALE, ListingCategory.ELECTRONICS_SALE].includes(p.category));
+            } else if (selectedCategory === ListingCategory.CAR_HIRE) {
+                 processedListings = processedListings.filter(p => [ListingCategory.CAR_HIRE, ListingCategory.CAR_SALE].includes(p.category));
+            }
+            else {
+                processedListings = processedListings.filter(p => p.category === selectedCategory);
+            }
+        }
+
+        // Filter by search query
+        if (searchQuery) {
+            const lowercasedQuery = searchQuery.toLowerCase();
+            processedListings = processedListings.filter(p => 
+                p.title.toLowerCase().includes(lowercasedQuery) ||
+                p.location.toLowerCase().includes(lowercasedQuery) ||
+                p.price.toString().includes(lowercasedQuery)
+            );
+        }
+
+        // Sort the results
+        switch (sortOption) {
+            case 'price-asc':
+                processedListings.sort((a, b) => a.price - b.price);
+                break;
+            case 'price-desc':
+                processedListings.sort((a, b) => b.price - a.price);
+                break;
+            case 'recent':
+            default:
+                break;
+        }
+        setListings(processedListings);
+    }, [sortOption, selectedCategory, searchQuery]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (sortMenuRef.current && !sortMenuRef.current.contains(event.target as Node)) {
+                setIsSortMenuOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [sortMenuRef]);
+
 
     const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
         if (scrollRef.current && scrollRef.current.scrollTop === 0) {
@@ -180,8 +300,8 @@ export const TenantHomeScreen: React.FC = () => {
             setPullPosition(60);
 
             setTimeout(() => {
-                const shuffled = [...properties].sort(() => Math.random() - 0.5);
-                setProperties(shuffled);
+                const shuffled = [...listings].sort(() => Math.random() - 0.5);
+                setListings(shuffled);
                 setIsRefreshing(false);
                 setPullPosition(0);
             }, 1500);
@@ -190,28 +310,48 @@ export const TenantHomeScreen: React.FC = () => {
         }
     };
 
-    const handlePropertyClick = (property: Property) => {
-        setSelectedProperty(property);
-        setCurrentScreen(Screen.PROPERTY_DETAILS);
+    const handleListingClick = (listing: Listing) => {
+        setSelectedListing(listing);
+        setCurrentScreen(Screen.LISTING_DETAILS);
     };
+    
+    const sortOptions: { label: string, value: SortOption }[] = [
+        { label: 'Recently Added', value: 'recent' },
+        { label: 'Price: Low to High', value: 'price-asc' },
+        { label: 'Price: High to Low', value: 'price-desc' },
+    ];
 
-    const recommendedProperties = properties.slice(0, 3);
+    const recommendedListings = listings.slice(0, 5);
 
     return (
         <div className="bg-secondary min-h-full flex flex-col">
             <div className="p-4 sticky top-0 bg-secondary/80 backdrop-blur-sm z-10">
                 <div className="flex items-center gap-2">
                     <div className="relative flex-grow">
-                        <input type="text" placeholder="Search location or price" className="w-full pl-10 pr-4 py-2 rounded-full border border-border-soft" />
+                        <input 
+                            type="text" 
+                            placeholder="Search for anything..." 
+                            className="w-full pl-10 pr-4 py-2 rounded-full border border-border-soft" 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            autoComplete="off"
+                        />
                         <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                     </div>
+                     <button 
+                        onClick={() => setViewMode(viewMode === 'list' ? 'map' : 'list')} 
+                        className="p-2 bg-white rounded-full shadow border border-border-soft hover:bg-gray-100 transition-colors flex-shrink-0"
+                        aria-label={viewMode === 'list' ? 'Switch to map view' : 'Switch to list view'}
+                    >
+                        {viewMode === 'list' ? <MapIcon className="w-5 h-5 text-text-primary" /> : <ListIcon className="w-5 h-5 text-text-primary" />}
+                    </button>
                     {isAuthenticated ? (
-                        <button 
-                            onClick={() => setViewMode(viewMode === 'list' ? 'map' : 'list')} 
+                        <button
+                            onClick={() => setCurrentScreen(Screen.NOTIFICATIONS)}
                             className="p-2 bg-white rounded-full shadow border border-border-soft hover:bg-gray-100 transition-colors flex-shrink-0"
-                            aria-label={viewMode === 'list' ? 'Switch to map view' : 'Switch to list view'}
+                            aria-label="View notifications"
                         >
-                            {viewMode === 'list' ? <MapIcon className="w-5 h-5 text-text-primary" /> : <ListIcon className="w-5 h-5 text-text-primary" />}
+                            <BellIcon className="w-5 h-5 text-text-primary" />
                         </button>
                     ) : (
                         <button 
@@ -222,11 +362,27 @@ export const TenantHomeScreen: React.FC = () => {
                         </button>
                     )}
                 </div>
-                <div className="flex space-x-2 mt-4">
-                    {['Location', 'Price', 'Bedrooms'].map(filter => (
-                        <button key={filter} className="px-4 py-1 bg-white border border-border-soft rounded-full text-sm text-text-secondary">{filter}</button>
-                    ))}
+                <div className="mt-4">
+                    <div className="flex space-x-2 overflow-x-auto scrollbar-hide -mx-4 px-4">
+                        <button 
+                            onClick={() => setSelectedCategory('all')} 
+                            className={`flex-shrink-0 px-3 py-2 rounded-full text-sm font-semibold transition-colors ${selectedCategory === 'all' ? 'bg-primary text-white' : 'bg-white border border-border-soft text-text-secondary'}`}
+                        >
+                           All
+                        </button>
+                        {categories.map(({name, icon: Icon, category}) => (
+                             <button 
+                                key={name}
+                                onClick={() => setSelectedCategory(category)} 
+                                className={`flex items-center flex-shrink-0 px-3 py-2 rounded-full text-sm font-semibold transition-colors ${selectedCategory === category ? 'bg-primary text-white' : 'bg-white border border-border-soft text-text-secondary'}`}
+                            >
+                               <Icon className="w-4 h-4 mr-1.5" />
+                               {name}
+                            </button>
+                        ))}
+                    </div>
                 </div>
+
             </div>
             
             {viewMode === 'list' ? (
@@ -257,16 +413,51 @@ export const TenantHomeScreen: React.FC = () => {
                         <div className="py-4">
                             <h2 className="font-heading text-xl font-semibold text-text-primary px-4 mb-3">Recommended for You</h2>
                             <div className="flex overflow-x-auto space-x-4 px-4 pb-2 scrollbar-hide">
-                                {recommendedProperties.map(prop => (
-                                    <RecommendedPropertyCard key={prop.id} property={prop} onClick={() => handlePropertyClick(prop)} />
+                                {recommendedListings.map(item => (
+                                    <RecommendedListingCard key={item.id} listing={item} onClick={() => handleListingClick(item)} />
                                 ))}
                             </div>
                         </div>
                         <div className="px-4">
-                            <h2 className="font-heading text-xl font-semibold text-text-primary mb-3">All Properties</h2>
-                            {properties.map(property => (
-                                <PropertyCard key={property.id} property={property} onClick={() => handlePropertyClick(property)} />
-                            ))}
+                            <div className="flex justify-between items-center mb-3">
+                                <h2 className="font-heading text-xl font-semibold text-text-primary">All Listings</h2>
+                                 <div className="relative" ref={sortMenuRef}>
+                                    <button 
+                                        onClick={() => setIsSortMenuOpen(!isSortMenuOpen)} 
+                                        className="px-3 py-1 bg-white border border-border-soft rounded-full text-sm text-text-secondary flex items-center flex-shrink-0"
+                                    >
+                                        <SortIcon className="w-4 h-4 mr-1.5" />
+                                        <span>Sort</span>
+                                        <ChevronDownIcon className={`w-4 h-4 ml-1 text-gray-400 transition-transform ${isSortMenuOpen ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    {isSortMenuOpen && (
+                                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl z-20 py-1 border border-border-soft animate-fade-in-up" style={{ animationDuration: '0.2s' }}>
+                                            {sortOptions.map(option => (
+                                                <button
+                                                    key={option.value}
+                                                    onClick={() => {
+                                                        setSortOption(option.value);
+                                                        setIsSortMenuOpen(false);
+                                                    }}
+                                                    className={`w-full text-left px-4 py-2 text-sm ${sortOption === option.value ? 'bg-primary/10 text-primary font-semibold' : 'text-text-primary'} hover:bg-gray-100`}
+                                                >
+                                                    {option.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            {listings.length > 0 ? (
+                                listings.map(listing => (
+                                    <ListingCard key={listing.id} listing={listing} onClick={() => handleListingClick(listing)} />
+                                ))
+                            ) : (
+                                <div className="text-center py-10">
+                                    <p className="text-text-secondary">No listings found.</p>
+                                    <p className="text-sm text-gray-400">Try adjusting your search or filters.</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -278,26 +469,34 @@ export const TenantHomeScreen: React.FC = () => {
 };
 
 
-export const PropertyDetailsScreen: React.FC = () => {
-    const { selectedProperty, setCurrentScreen, isAuthenticated } = useAppContext();
+export const ListingDetailsScreen: React.FC = () => {
+    const { selectedListing, setSelectedListing, setCurrentScreen, isAuthenticated, setPostLoginRedirect } = useAppContext();
+    const [listingData, setListingData] = useState<Listing | null>(selectedListing);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [isFavorite, setIsFavorite] = useState(false);
     const [touchStartX, setTouchStartX] = useState<number | null>(null);
     const [isImageLoading, setIsImageLoading] = useState(true);
-    const [showBookingModal, setShowBookingModal] = useState(false);
     const [showLoginModal, setShowLoginModal] = useState(false);
+    const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+
+    // New state for modals
+    const [showScheduleModal, setShowScheduleModal] = useState(false);
+    const [showBookingConfirmationModal, setShowBookingConfirmationModal] = useState(false);
+    const [showInquiryModal, setShowInquiryModal] = useState(false);
+    const [showInquiryConfirmationModal, setShowInquiryConfirmationModal] = useState(false);
+
 
     useEffect(() => {
-        if (!selectedProperty) {
-            setCurrentScreen(Screen.TENANT_HOME);
+        if (!listingData) {
+            setCurrentScreen(Screen.HOME_SCREEN);
         }
-    }, [selectedProperty, setCurrentScreen]);
+    }, [listingData, setCurrentScreen]);
 
     useEffect(() => {
         setIsImageLoading(true);
     }, [currentImageIndex]);
 
-    if (!selectedProperty) {
+    if (!listingData) {
         return null; // Or a loading/error state
     }
     
@@ -309,39 +508,58 @@ export const PropertyDetailsScreen: React.FC = () => {
         }
     };
     
-    const handleCall = () => {
-        if (selectedProperty?.phoneNumber) {
-            window.location.href = `tel:${selectedProperty.phoneNumber}`;
-        } else {
-            alert('Phone number not available.');
-        }
-    };
-
     const handleShare = async () => {
-        if (!selectedProperty) return;
+        if (!listingData) return;
 
         const shareData = {
-            title: `Check out this property on NyumbaNow`,
-            text: `${selectedProperty.title}\nLocation: ${selectedProperty.location}\nPrice: MK ${selectedProperty.price.toLocaleString()}/month`,
-            url: `https://nyumbanow.app/property/${selectedProperty.id}` // Mock URL
+            title: `Check out this listing on MarketPaLine`,
+            text: `${listingData.title}\nLocation: ${listingData.location}\nPrice: MK ${listingData.price.toLocaleString()}`,
+            url: `https://marketpaline.app/listing/${listingData.id}` // Mock URL
         };
 
         if (navigator.share) {
             try {
                 await navigator.share(shareData);
             } catch (err) {
-                console.error('Error sharing property:', err);
+                console.error('Error sharing listing:', err);
             }
         } else {
             // Fallback for browsers that don't support the Web Share API
             alert('Sharing is not supported on your browser. You can manually copy the link: ' + shareData.url);
         }
     };
+    
+    const handleReviewSubmit = (rating: number, comment: string) => {
+        const newReview: Review = {
+            id: Date.now(),
+            authorName: 'John Doe', // Mock user name
+            rating,
+            comment,
+            timestamp: 'Just now',
+        };
 
-    const handleMessage = () => setCurrentScreen(Screen.MESSAGES);
-    const handleBookViewing = () => setShowBookingModal(true);
+        const updatedReviews = [newReview, ...(listingData.reviews || [])];
+        const updatedListing = { ...listingData, reviews: updatedReviews };
+        
+        setListingData(updatedListing);
+        setSelectedListing(updatedListing); // Also update context if needed elsewhere
+        setIsReviewModalOpen(false);
+    };
 
-    const images = selectedProperty.images.length > 0 ? selectedProperty.images : [selectedProperty.imageUrl];
+    const handleScheduleSubmit = (date: string, time: string) => {
+        console.log(`Viewing request for ${date} at ${time}`);
+        setShowScheduleModal(false);
+        setShowBookingConfirmationModal(true);
+    };
+
+    const handleInquirySubmit = (message: string) => {
+        console.log("Inquiry sent:", message);
+        setShowInquiryModal(false);
+        setShowInquiryConfirmationModal(true);
+    };
+
+
+    const images = listingData.images.length > 0 ? listingData.images : [listingData.imageUrl];
 
     const nextImage = () => {
         setCurrentImageIndex((prevIndex) => (prevIndex + 1) % images.length);
@@ -374,9 +592,19 @@ export const PropertyDetailsScreen: React.FC = () => {
     const BookingConfirmationModal = ({ onClose }: { onClose: () => void }) => (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 m-4 max-w-sm w-full text-center animate-fade-in-up">
-                <h2 className="font-heading text-xl font-bold mb-2">Booking Request Sent</h2>
-                <p className="text-text-secondary mb-6">The landlord/agent has been notified. They will contact you shortly to confirm the date and time.</p>
+                <h2 className="font-heading text-xl font-bold mb-2">Request Sent</h2>
+                <p className="text-text-secondary mb-6">The seller has been notified. They will contact you shortly to confirm.</p>
                 <Button onClick={onClose}>Got it</Button>
+            </div>
+        </div>
+    );
+
+    const InquiryConfirmationModal = ({ onClose }: { onClose: () => void }) => (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 m-4 max-w-sm w-full text-center animate-fade-in-up">
+                <h2 className="font-heading text-xl font-bold mb-2">Inquiry Sent</h2>
+                <p className="text-text-secondary mb-6">Your message has been sent. The seller will respond to you soon.</p>
+                <Button onClick={onClose}>Great!</Button>
             </div>
         </div>
     );
@@ -385,9 +613,10 @@ export const PropertyDetailsScreen: React.FC = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 m-4 max-w-sm w-full text-center animate-fade-in-up">
                 <h2 className="font-heading text-xl font-bold mb-2">Login Required</h2>
-                <p className="text-text-secondary mb-6">Please log in or register to contact the agent and book a viewing.</p>
+                <p className="text-text-secondary mb-6">Please log in or register to contact the seller.</p>
                 <Button onClick={() => {
                     onClose();
+                    setPostLoginRedirect(Screen.LISTING_DETAILS);
                     setCurrentScreen(Screen.LOGIN);
                 }} className="mb-2">Login / Register</Button>
                 <button onClick={onClose} className="text-sm text-text-secondary">Maybe Later</button>
@@ -395,13 +624,141 @@ export const PropertyDetailsScreen: React.FC = () => {
         </div>
     );
 
+    const ScheduleViewingModal = ({ onClose, onSubmit }: { onClose: () => void, onSubmit: (date: string, time: string) => void }) => {
+        const [date, setDate] = useState('');
+        const [time, setTime] = useState('');
+    
+        const handleSubmit = () => {
+            if (date && time) {
+                onSubmit(date, time);
+            }
+        };
+    
+        return (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 m-4 max-w-sm w-full animate-fade-in-up">
+                    <h2 className="font-heading text-xl font-bold mb-4">Schedule a Viewing</h2>
+                    <InputField label="Preferred Date" id="viewingDate" type="date" value={date} onChange={(e) => setDate(e.target.value)} min={new Date().toISOString().split("T")[0]}/>
+                    <InputField label="Preferred Time" id="viewingTime" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+                    <div className="flex gap-2 mt-4">
+                        <Button onClick={onClose} variant="outline" className="w-1/2">Cancel</Button>
+                        <Button onClick={handleSubmit} className="w-1/2" disabled={!date || !time}>Send Request</Button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+    
+    const InquiryModal = ({ listing, onClose, onSubmit }: { listing: Listing, onClose: () => void, onSubmit: (message: string) => void }) => {
+        const [message, setMessage] = useState(
+          `Hi ${listing.sellerName}, I'm interested in "${listing.title}" at ${listing.location}. I'd like to know more details. Thank you!`
+        );
+    
+        const handleSubmit = () => {
+            if (message.trim()) {
+                onSubmit(message);
+            }
+        };
+    
+        return (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 m-4 max-w-sm w-full animate-fade-in-up">
+                    <h2 className="font-heading text-xl font-bold mb-4">Send an Inquiry</h2>
+                    <TextAreaField
+                        label={`Message to ${listing.sellerName}`}
+                        id="inquiryMessage"
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                    />
+                    <div className="flex gap-2 mt-4">
+                        <Button onClick={onClose} variant="outline" className="w-1/2">Cancel</Button>
+                        <Button onClick={handleSubmit} className="w-1/2" disabled={!message.trim()}>Send Inquiry</Button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const LeaveReviewModal = ({ onClose, onSubmit }: { onClose: () => void, onSubmit: (rating: number, comment: string) => void }) => {
+        const [rating, setRating] = useState(0);
+        const [comment, setComment] = useState('');
+        const [hoverRating, setHoverRating] = useState(0);
+
+        const handleSubmit = () => {
+            if (rating > 0 && comment.trim().length > 0) {
+                onSubmit(rating, comment);
+            }
+        };
+
+        return (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 m-4 max-w-sm w-full animate-fade-in-up">
+                    <h2 className="font-heading text-xl font-bold mb-4">Leave a Review</h2>
+                    <div className="mb-4">
+                        <p className="block text-sm font-medium text-text-secondary mb-2">Your Rating</p>
+                        <div className="flex items-center space-x-1">
+                            {[...Array(5)].map((_, index) => {
+                                const starValue = index + 1;
+                                return (
+                                    <button 
+                                        key={starValue} 
+                                        onClick={() => setRating(starValue)}
+                                        onMouseEnter={() => setHoverRating(starValue)}
+                                        onMouseLeave={() => setHoverRating(0)}
+                                    >
+                                        <StarIcon className={`w-8 h-8 transition-colors ${(hoverRating || rating) >= starValue ? 'text-yellow-400 fill-current' : 'text-gray-300'}`} />
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    <TextAreaField label="Your Comment" id="reviewComment" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Share your experience..." />
+                    <div className="flex gap-2 mt-4">
+                        <Button onClick={onClose} variant="outline" className="w-1/2">Cancel</Button>
+                        <Button onClick={handleSubmit} className="w-1/2" disabled={rating === 0 || !comment.trim()}>Submit</Button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
 
     const statusStyles: { [key: string]: string } = {
         Available: 'bg-green-100 text-green-800',
         Rented: 'bg-red-100 text-red-800',
         Pending: 'bg-yellow-100 text-yellow-800',
         'Under Maintenance': 'bg-blue-100 text-blue-800',
+        Sold: 'bg-gray-100 text-gray-800',
     };
+    
+    const reviews = listingData.reviews || [];
+    const averageRating = reviews.length > 0 ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length : 0;
+    const priceSuffix = listingData.priceType === 'per month' ? '/month' : listingData.priceType === 'per day' ? '/day' : '';
+    const isViewable = [ListingCategory.HOUSE_RENTAL, ListingCategory.BEDROOM_RENTAL, ListingCategory.EVENT_VENUE_HIRE].includes(listingData.category);
+
+    // FIX: Properly type the AmenityItem component as a React.FC to allow for the `key` prop.
+    interface AmenityItemProps {
+        icon: React.FC<React.SVGProps<SVGSVGElement>>;
+        label: string;
+    }
+    const AmenityItem: React.FC<AmenityItemProps> = ({ icon: Icon, label }) => (
+        <div className="flex flex-col items-center">
+            <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-2">
+                <Icon className="w-6 h-6 text-primary" />
+            </div>
+            <span className="text-xs text-text-secondary">{label}</span>
+        </div>
+    );
+    
+    const amenities = [
+        { name: 'Wi-Fi', icon: WifiIcon },
+        { name: 'Parking', icon: CarIcon },
+        { name: '24/7 Security', icon: ShieldIcon },
+        { name: 'Electricity', icon: ZapIcon },
+        { name: 'Running Water', icon: DropletIcon },
+    ];
+    const showAmenities = [ListingCategory.HOUSE_RENTAL, ListingCategory.HOUSE_SALE, ListingCategory.EVENT_VENUE_HIRE].includes(listingData.category);
+
 
     return (
         <div className="bg-secondary min-h-full">
@@ -411,27 +768,24 @@ export const PropertyDetailsScreen: React.FC = () => {
                 onTouchEnd={handleTouchEnd}
             >
                 {isImageLoading && (
-                    <div className="absolute inset-0 bg-gray-300 overflow-hidden">
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-200/50 to-transparent -translate-x-full animate-shimmer"></div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <NyumbaNowLogo className="w-12 h-12 text-gray-400/80" />
-                        </div>
+                    <div className="absolute inset-0 bg-gray-300 flex items-center justify-center">
+                        <LoaderIcon className="w-12 h-12 text-primary animate-spin" />
                     </div>
                 )}
                 <img 
                     src={images[currentImageIndex]} 
-                    alt={`${selectedProperty.title} ${currentImageIndex + 1}`} 
+                    alt={`${listingData.title} ${currentImageIndex + 1}`} 
                     className={`w-full h-full object-cover select-none transition-opacity duration-300 ${isImageLoading ? 'opacity-0' : 'opacity-100'}`}
                     onLoad={() => setIsImageLoading(false)}
                     aria-live="polite"
                 />
                 
-                <button onClick={() => setCurrentScreen(Screen.TENANT_HOME)} className="absolute top-4 left-4 bg-black/40 p-2 rounded-full text-white z-10" aria-label="Back to home">
+                <button onClick={() => setCurrentScreen(Screen.HOME_SCREEN)} className="absolute top-4 left-4 bg-black/40 p-2 rounded-full text-white z-10" aria-label="Back to home">
                     <ChevronLeftIcon className="w-6 h-6" />
                 </button>
                 
                 <div className="absolute top-4 right-4 flex gap-2 z-10">
-                    <button onClick={handleShare} className="bg-black/40 p-2 rounded-full text-white" aria-label="Share property">
+                    <button onClick={handleShare} className="bg-black/40 p-2 rounded-full text-white" aria-label="Share listing">
                         <ShareIcon className="w-6 h-6" />
                     </button>
                     <button onClick={() => handleActionClick(() => setIsFavorite(!isFavorite))} className="bg-black/40 p-2 rounded-full text-white" aria-label="Toggle favorite">
@@ -456,86 +810,145 @@ export const PropertyDetailsScreen: React.FC = () => {
                 )}
             </div>
 
-            <div className="p-4 pb-24">
+            <div className="p-4 pb-40">
                 <div className="flex justify-between items-start">
-                    <div>
-                        <h1 className="font-heading text-2xl font-bold text-text-primary">{selectedProperty.title}</h1>
-                        <div className="flex items-center text-text-secondary text-base mt-1">
-                            <MapPinIcon className="w-4 h-4 mr-1" />
-                            <span>{selectedProperty.location}</span>
-                        </div>
+                    <div className="pr-2">
+                        <h1 className="font-heading text-2xl font-bold text-text-primary">{listingData.title}</h1>
+                         {reviews.length > 0 && (
+                            <div className="flex items-center gap-2 mt-1">
+                                <StarRating rating={averageRating} />
+                                <span className="text-sm text-text-secondary">({reviews.length} review{reviews.length > 1 ? 's' : ''})</span>
+                            </div>
+                        )}
                     </div>
-                    <div className={`text-sm font-semibold px-2 py-1 rounded ${statusStyles[selectedProperty.status]}`}>
-                        {selectedProperty.status}
-                    </div>
-                </div>
-
-                <p className="font-heading text-primary font-bold text-2xl my-4">MK {selectedProperty.price.toLocaleString()}/month</p>
-
-                <div className="flex items-center text-text-secondary text-base space-x-6 border-y border-border-soft py-3">
-                    <div className="flex items-center">
-                        <BedIcon className="w-5 h-5 mr-2 text-primary" />
-                        <span>{selectedProperty.bedrooms} Bedrooms</span>
-                    </div>
-                    <div className="flex items-center">
-                        <BathIcon className="w-5 h-5 mr-2 text-primary" />
-                        <span>{selectedProperty.bathrooms} Bathrooms</span>
+                    <div className={`text-xs flex-shrink-0 font-semibold px-2 py-1 rounded ${statusStyles[listingData.status]}`}>
+                        {listingData.status}
                     </div>
                 </div>
 
-                <div className="mt-4">
+                <p className="font-heading text-primary font-bold text-2xl my-4">MK {listingData.price.toLocaleString()}{priceSuffix}</p>
+                
+                {(listingData.bedrooms || listingData.bathrooms) && (
+                     <div className="bg-white rounded-lg shadow-sm p-4 flex items-center text-text-secondary text-base space-x-6">
+                        {listingData.bedrooms && (
+                            <div className="flex items-center">
+                                <BedIcon className="w-5 h-5 mr-2 text-primary" />
+                                <span>{listingData.bedrooms} Bedrooms</span>
+                            </div>
+                        )}
+                        {listingData.bathrooms && (
+                            <div className="flex items-center">
+                                <BathIcon className="w-5 h-5 mr-2 text-primary" />
+                                <span>{listingData.bathrooms} Bathrooms</span>
+                            </div>
+                        )}
+                    </div>
+                )}
+                
+                <div className="mt-4 bg-white rounded-lg shadow-sm p-4">
                     <h2 className="font-heading text-lg font-semibold text-text-primary mb-2">Description</h2>
-                    <p className="text-text-secondary">{selectedProperty.description}</p>
+                    <p className="text-text-secondary">{listingData.description}</p>
                 </div>
                 
-                 <div className="mt-4">
-                    <h2 className="font-heading text-lg font-semibold text-text-primary mb-2">Landlord/Agent</h2>
-                    {isAuthenticated ? (
-                        <div className="flex items-center bg-white p-3 rounded-lg">
-                            <UserIcon className="w-10 h-10 text-text-secondary bg-gray-200 p-2 rounded-full mr-3"/>
-                            <div>
-                                <p className="font-semibold text-text-primary">{selectedProperty.landlordName}</p>
-                                <p className="text-sm text-text-secondary">Landlord</p>
-                            </div>
+                {showAmenities && (
+                    <div className="mt-4 bg-white rounded-lg shadow-sm p-4">
+                        <h2 className="font-heading text-lg font-semibold text-text-primary mb-4">Amenities</h2>
+                        <div className="grid grid-cols-4 gap-y-4 text-center">
+                            {amenities.slice(0, 4).map(amenity => <AmenityItem key={amenity.name} icon={amenity.icon} label={amenity.name} />)}
                         </div>
+                    </div>
+                )}
+
+                <div className="mt-4 bg-white rounded-lg shadow-sm overflow-hidden">
+                    <div className="p-4">
+                        <h2 className="font-heading text-lg font-semibold text-text-primary mb-2">Location</h2>
+                        <div className="flex items-center text-text-secondary text-base">
+                            <MapPinIcon className="w-4 h-4 mr-1.5 flex-shrink-0" />
+                            <span>{listingData.location}</span>
+                        </div>
+                    </div>
+                    <img src="https://picsum.photos/seed/map1/800/400" alt="Map of location" className="w-full h-40 object-cover" />
+                </div>
+                
+                <div className="mt-4 bg-white rounded-lg shadow-sm p-4">
+                    <h2 className="font-heading text-lg font-semibold text-text-primary mb-3">About the Seller</h2>
+                    <div className="flex items-center mb-4">
+                        <img src={`https://picsum.photos/seed/seller${listingData.sellerId}/100`} alt={listingData.sellerName} className="w-12 h-12 rounded-full mr-4 bg-gray-200" />
+                        <div>
+                            <p className="font-semibold text-text-primary">{listingData.sellerName}</p>
+                            <p className="text-sm text-text-secondary">Seller</p>
+                        </div>
+                    </div>
+                     {isAuthenticated ? (
+                         <div className="flex gap-3">
+                            {listingData.phoneNumber && (
+                                <a href={`tel:${listingData.phoneNumber}`} className="flex-1 bg-primary/10 text-primary font-semibold py-3 px-4 rounded-lg flex items-center justify-center hover:bg-primary/20 transition-colors">
+                                    <PhoneIcon className="w-5 h-5 mr-2" /> Call
+                                </a>
+                            )}
+                            {listingData.email && (
+                                <a href={`mailto:${listingData.email}`} className="flex-1 bg-gray-200 text-text-primary font-semibold py-3 px-4 rounded-lg flex items-center justify-center hover:bg-gray-300 transition-colors">
+                                    <MailIcon className="w-5 h-5 mr-2" /> Email
+                                </a>
+                            )}
+                         </div>
                     ) : (
-                        <div className="flex items-center bg-white p-3 rounded-lg">
-                            <UserIcon className="w-10 h-10 text-text-secondary bg-gray-200 p-2 rounded-full mr-3"/>
-                            <div>
-                                <p className="font-semibold text-text-primary">Login to see agent details</p>
-                            </div>
+                        <div className="text-center p-4 border-t border-border-soft -m-4 mt-4">
+                            <p className="text-text-secondary text-sm">Please log in to view contact details.</p>
+                             <button
+                                onClick={() => handleActionClick(() => {})}
+                                className="mt-2 text-sm font-semibold text-primary hover:underline"
+                            >
+                                Login / Register
+                            </button>
                         </div>
                     )}
                 </div>
+                
+                <div className="mt-4 bg-white rounded-lg shadow-sm">
+                    <div className="flex justify-between items-center p-4">
+                        <h2 className="font-heading text-lg font-semibold text-text-primary">Reviews</h2>
+                         {isAuthenticated && (
+                            <button onClick={() => setIsReviewModalOpen(true)} className="text-sm font-semibold text-primary hover:underline">
+                                Leave a Review
+                            </button>
+                        )}
+                    </div>
+                    <div className="px-4 divide-y divide-border-soft">
+                        {reviews.length > 0 ? (
+                            reviews.map(review => <ReviewCard key={review.id} review={review} />)
+                        ) : (
+                            <div className="text-center py-8">
+                                <p className="text-text-secondary">No reviews yet.</p>
+                                <p className="text-sm text-gray-400">Be the first to share your experience!</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
 
             </div>
-            <div className="fixed bottom-0 left-0 right-0 max-w-sm mx-auto bg-white p-4 border-t border-border-soft flex items-center gap-3">
-                <button
-                    onClick={() => handleActionClick(handleCall)}
-                    className="p-3.5 border border-border-soft rounded-lg text-text-secondary hover:bg-gray-50 transition-colors"
-                    aria-label="Call landlord"
-                >
-                    <PhoneIcon className="w-6 h-6" />
-                </button>
-                <button
-                    onClick={() => handleActionClick(handleMessage)}
-                    className="p-3.5 border border-border-soft rounded-lg text-text-secondary hover:bg-gray-50 transition-colors"
-                    aria-label="Message landlord"
-                >
-                    <MessageSquareIcon className="w-6 h-6" />
-                </button>
-                <Button onClick={() => handleActionClick(handleBookViewing)} className="flex-1 w-auto">
-                    Book Viewing
+            <div className="fixed bottom-0 left-0 right-0 max-w-sm mx-auto bg-white p-3 border-t border-border-soft flex items-center gap-3">
+                 <Button onClick={() => handleActionClick(() => setShowInquiryModal(true))} variant="outline" className="w-full">
+                    Inquire Now
                 </Button>
+                {isViewable && (
+                    <Button onClick={() => handleActionClick(() => setShowScheduleModal(true))} className="w-full">
+                        Schedule Viewing
+                    </Button>
+                )}
             </div>
-             {showBookingModal && <BookingConfirmationModal onClose={() => setShowBookingModal(false)} />}
+             {showBookingConfirmationModal && <BookingConfirmationModal onClose={() => setShowBookingConfirmationModal(false)} />}
+             {showInquiryConfirmationModal && <InquiryConfirmationModal onClose={() => setShowInquiryConfirmationModal(false)} />}
              {showLoginModal && <LoginRequiredModal onClose={() => setShowLoginModal(false)} />}
+             {isReviewModalOpen && <LeaveReviewModal onClose={() => setIsReviewModalOpen(false)} onSubmit={handleReviewSubmit} />}
+             {showScheduleModal && <ScheduleViewingModal onClose={() => setShowScheduleModal(false)} onSubmit={handleScheduleSubmit} />}
+             {showInquiryModal && <InquiryModal listing={listingData} onClose={() => setShowInquiryModal(false)} onSubmit={handleInquirySubmit} />}
         </div>
     );
 };
 
 export const MessagesScreen: React.FC = () => {
-    const { setCurrentScreen, selectedProperty } = useAppContext();
+    const { setCurrentScreen, selectedListing } = useAppContext();
     const [messages, setMessages] = useState(MOCK_MESSAGES);
     const [newMessage, setNewMessage] = useState('');
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -608,8 +1021,8 @@ export const MessagesScreen: React.FC = () => {
         }
     };
     
-    const contactName = selectedProperty?.landlordName || "Messages";
-    const backScreen = selectedProperty ? Screen.PROPERTY_DETAILS : Screen.TENANT_HOME;
+    const contactName = selectedListing?.sellerName || "Messages";
+    const backScreen = selectedListing ? Screen.LISTING_DETAILS : Screen.HOME_SCREEN;
 
     return (
         <div className="flex flex-col h-full bg-secondary">
@@ -677,12 +1090,12 @@ export const MessagesScreen: React.FC = () => {
 };
 
 export const FavoritesScreen: React.FC = () => {
-    const { setCurrentScreen, setSelectedProperty } = useAppContext();
-    const [favorites, setFavorites] = useState<Property[]>(MOCK_PROPERTIES.slice(1, 3)); // Mock favorites
+    const { setCurrentScreen, setSelectedListing } = useAppContext();
+    const [favorites, setFavorites] = useState<Listing[]>(MOCK_LISTINGS.slice(1, 3)); // Mock favorites
 
-    const handlePropertyClick = (property: Property) => {
-        setSelectedProperty(property);
-        setCurrentScreen(Screen.PROPERTY_DETAILS);
+    const handleListingClick = (listing: Listing) => {
+        setSelectedListing(listing);
+        setCurrentScreen(Screen.LISTING_DETAILS);
     };
 
     return (
@@ -690,14 +1103,14 @@ export const FavoritesScreen: React.FC = () => {
             <Header title="Favorites" />
             <div className="flex-grow overflow-y-auto p-4 scrollbar-hide">
                 {favorites.length > 0 ? (
-                    favorites.map(property => (
-                        <PropertyCard key={property.id} property={property} onClick={() => handlePropertyClick(property)} />
+                    favorites.map(listing => (
+                        <ListingCard key={listing.id} listing={listing} onClick={() => handleListingClick(listing)} />
                     ))
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full text-center text-text-secondary">
                         <HeartIcon className="w-16 h-16 mb-4 text-gray-300" />
                         <h2 className="font-heading text-xl font-semibold">No Favorites Yet</h2>
-                        <p className="mt-2">Tap the heart on a property to save it here.</p>
+                        <p className="mt-2">Tap the heart on a listing to save it here.</p>
                     </div>
                 )}
             </div>
@@ -705,23 +1118,23 @@ export const FavoritesScreen: React.FC = () => {
     );
 };
 
-const ProfileScreen: React.FC = () => {
+export const ProfileScreen: React.FC = () => {
     const { setCurrentScreen, userRole, setUserRole, setIsAuthenticated } = useAppContext();
     
     const handleLogout = () => {
         setUserRole(UserRole.NONE);
         setIsAuthenticated(false);
-        setCurrentScreen(Screen.TENANT_HOME);
+        setCurrentScreen(Screen.HOME_SCREEN);
     };
 
-    const profileName = userRole === UserRole.TENANT ? "John Doe" : (userRole === UserRole.LANDLORD ? "Jane Smith" : "NyumbaNow Agency");
+    const profileName = userRole === UserRole.BUYER ? "John Doe" : "Jane Smith";
     const profileEmail = "example@email.com";
 
     const menuItems = [
-        { label: 'Edit Profile', icon: UserIcon, screen: Screen.TENANT_PROFILE }, // Placeholder
+        { label: 'Edit Profile', icon: UserIcon, screen: Screen.EDIT_PROFILE },
         { label: 'Settings', icon: SettingsIcon, screen: Screen.SETTINGS },
         { label: 'Rules & Policies', icon: FileTextIcon, screen: Screen.RULES_AND_POLICIES },
-        { label: 'About NyumbaNow', icon: InfoIcon, screen: Screen.ABOUT },
+        { label: 'About MarketPaLine', icon: InfoIcon, screen: Screen.ABOUT },
     ];
 
     return (
@@ -757,23 +1170,16 @@ const ProfileScreen: React.FC = () => {
     );
 };
 
-export const TenantProfileScreen: React.FC = () => <ProfileScreen />;
-export const AgentProfileScreen: React.FC = () => <ProfileScreen />;
+export const DashboardScreen: React.FC = () => {
+    const { setCurrentScreen } = useAppContext();
+    const stats = [{ label: 'Active Listings', value: 4 }, { label: 'Sold/Rented', value: 1 }, { label: 'Pending', value: 3 }];
 
-const DashboardScreen: React.FC = () => {
-    const { userRole, setCurrentScreen } = useAppContext();
-    const stats = userRole === UserRole.LANDLORD ? 
-        [{ label: 'Total Properties', value: 4 }, { label: 'Rented', value: 1 }, { label: 'Available', value: 3 }] :
-        [{ label: 'Managed Properties', value: 12 }, { label: 'Rented', value: 5 }, { label: 'Available', value: 7 }];
-
-    const title = userRole === UserRole.LANDLORD ? "Landlord Dashboard" : "Agent Dashboard";
-    const addPropertyScreen = userRole === UserRole.LANDLORD ? Screen.ADD_PROPERTY : Screen.AGENT_PROPERTY_MANAGEMENT;
+    const title = "Seller Dashboard";
     
     const actionItems = [
         { id: 1, type: 'viewing', text: "New viewing request for '3 Bedroom in Area 49'", icon: CalendarIcon },
-        { id: 2, type: 'message', text: "Unread message from 'Potential Tenant'", icon: MessageSquareIcon },
+        { id: 2, type: 'message', text: "Unread message from 'Potential Buyer'", icon: MessageSquareIcon },
     ];
-
 
     return (
         <div className="flex flex-col h-full bg-secondary">
@@ -792,8 +1198,8 @@ const DashboardScreen: React.FC = () => {
 
                 <div className="mb-6">
                     <h2 className="font-heading text-lg font-semibold text-text-primary mb-3">Quick Actions</h2>
-                    <Button onClick={() => setCurrentScreen(addPropertyScreen)} variant="outline">
-                        + Add New Property
+                    <Button onClick={() => setCurrentScreen(Screen.ADD_LISTING)} variant="outline">
+                        + Post a New Ad
                     </Button>
                 </div>
 
@@ -801,7 +1207,7 @@ const DashboardScreen: React.FC = () => {
                     <h2 className="font-heading text-lg font-semibold text-text-primary mb-3">Action Required</h2>
                     <div className="bg-white rounded-lg shadow-sm">
                         {actionItems.map((item, index) => (
-                            <button key={item.id} onClick={() => {}} className={`w-full flex items-center p-3 text-left ${index < actionItems.length - 1 ? 'border-b border-border-soft' : ''}`}>
+                            <button key={item.id} onClick={() => setCurrentScreen(Screen.MESSAGES)} className={`w-full flex items-center p-3 text-left ${index < actionItems.length - 1 ? 'border-b border-border-soft' : ''}`}>
                                 <div className="p-2 bg-yellow-100 rounded-full mr-3">
                                     <item.icon className="w-5 h-5 text-yellow-600" />
                                 </div>
@@ -818,40 +1224,85 @@ const DashboardScreen: React.FC = () => {
     );
 };
 
-export const LandlordDashboardScreen: React.FC = () => <DashboardScreen />;
-export const AgentDashboardScreen: React.FC = () => <DashboardScreen />;
+export const AddListingScreen: React.FC = () => {
+    const { setCurrentScreen, listingToEdit, setListingToEdit } = useAppContext();
+    const isEditMode = !!listingToEdit;
 
-const InputField = ({ label, id, ...props }: {label: string, id: string} & React.InputHTMLAttributes<HTMLInputElement>) => (
-    <div className="mb-4">
-        <label htmlFor={id} className="block text-sm font-medium text-text-secondary mb-1">{label}</label>
-        <input id={id} {...props} className="w-full px-4 py-3 rounded-lg border border-border-soft focus:ring-primary focus:border-primary" />
-    </div>
-);
+    const [category, setCategory] = useState<ListingCategory>(ListingCategory.HOUSE_RENTAL);
+    const [title, setTitle] = useState('');
+    const [description, setDescription] = useState('');
+    const [price, setPrice] = useState('');
+    const [location, setLocation] = useState('');
+    const [bedrooms, setBedrooms] = useState('');
+    const [bathrooms, setBathrooms] = useState('');
 
-const TextAreaField = ({ label, id, ...props }: {label: string, id: string} & React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
-    <div className="mb-4">
-        <label htmlFor={id} className="block text-sm font-medium text-text-secondary mb-1">{label}</label>
-        <textarea id={id} {...props} className="w-full px-4 py-3 rounded-lg border border-border-soft focus:ring-primary focus:border-primary h-28 resize-none"></textarea>
-    </div>
-);
+    useEffect(() => {
+        if (listingToEdit) {
+            setTitle(listingToEdit.title);
+            setDescription(listingToEdit.description);
+            setPrice(listingToEdit.price.toString());
+            setLocation(listingToEdit.location);
+            setBedrooms(listingToEdit.bedrooms?.toString() || '');
+            setBathrooms(listingToEdit.bathrooms?.toString() || '');
+            setCategory(listingToEdit.category);
+        } else {
+            // Reset form
+            setTitle(''); setDescription(''); setPrice(''); setLocation(''); setBedrooms(''); setBathrooms('');
+            setCategory(ListingCategory.HOUSE_RENTAL);
+        }
+    }, [listingToEdit]);
 
-export const AddPropertyScreen: React.FC = () => {
-    const { setCurrentScreen } = useAppContext();
+    const handleBack = () => {
+        setListingToEdit(null);
+        setCurrentScreen(isEditMode ? Screen.MANAGE_LISTINGS : Screen.DASHBOARD);
+    };
+
+    const handleSubmit = () => {
+        alert(isEditMode ? 'Listing Updated!' : 'Listing Submitted!');
+        setListingToEdit(null);
+        setCurrentScreen(Screen.MANAGE_LISTINGS);
+    };
+    
+    const showPropertyFields = [ListingCategory.HOUSE_RENTAL, ListingCategory.HOUSE_SALE, ListingCategory.BEDROOM_RENTAL].includes(category);
+    
     return (
         <div className="flex flex-col h-full bg-secondary">
-            <Header title="Add New Property" onBack={() => setCurrentScreen(Screen.LANDLORD_DASHBOARD)} />
+            <Header title={isEditMode ? "Edit Listing" : "Create New Listing"} onBack={handleBack} />
             <div className="flex-grow overflow-y-auto p-4 scrollbar-hide">
-                <InputField label="Property Title" id="title" type="text" placeholder="e.g., 3 Bedroom in Area 49" />
-                <TextAreaField label="Description" id="description" placeholder="Describe the property..." />
-                <InputField label="Price (MK/month)" id="price" type="number" placeholder="180000" />
-                <InputField label="Location" id="location" type="text" placeholder="Area 49, Lilongwe" />
-                <div className="grid grid-cols-2 gap-4">
-                    <InputField label="Bedrooms" id="bedrooms" type="number" placeholder="3" />
-                    <InputField label="Bathrooms" id="bathrooms" type="number" placeholder="2" />
+                <div className="mb-4">
+                    <label htmlFor="category" className="block text-sm font-medium text-text-secondary mb-1">Category</label>
+                    <div className="relative">
+                        <select
+                            id="category"
+                            value={category}
+                            onChange={e => setCategory(e.target.value as ListingCategory)}
+                            className="w-full px-4 py-3 rounded-lg border border-border-soft focus:ring-primary focus:border-primary bg-white appearance-none"
+                            disabled={isEditMode}
+                        >
+                            {Object.values(ListingCategory).map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                        </select>
+                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                            <ChevronDownIcon className="w-5 h-5" />
+                        </div>
+                    </div>
                 </div>
+
+                <InputField label="Title" id="title" type="text" placeholder="e.g., Slightly Used Dell Laptop" value={title} onChange={e => setTitle(e.target.value)} />
+                <TextAreaField label="Description" id="description" placeholder="Describe the item..." value={description} onChange={e => setDescription(e.target.value)} />
+                <InputField label="Price (MK)" id="price" type="number" placeholder="350000" value={price} onChange={e => setPrice(e.target.value)} />
+                <InputField label="Location" id="location" type="text" placeholder="Blantyre, Malawi" value={location} onChange={e => setLocation(e.target.value)} />
+                
+                {showPropertyFields && (
+                    <div className="grid grid-cols-2 gap-4">
+                        <InputField label="Bedrooms" id="bedrooms" type="number" placeholder="3" value={bedrooms} onChange={e => setBedrooms(e.target.value)} />
+                        <InputField label="Bathrooms" id="bathrooms" type="number" placeholder="2" value={bathrooms} onChange={e => setBathrooms(e.target.value)} />
+                    </div>
+                )}
                 
                 <div className="mb-6">
-                    <label className="block text-sm font-medium text-text-secondary mb-2">Property Photos</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">Photos</label>
                     <div className="border-2 border-dashed border-border-soft rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50">
                         <CameraIcon className="w-10 h-10 mx-auto text-gray-400 mb-2"/>
                         <p className="text-sm text-text-secondary">Tap to upload photos</p>
@@ -859,81 +1310,79 @@ export const AddPropertyScreen: React.FC = () => {
                     </div>
                 </div>
 
-                <Button onClick={() => alert('Property Submitted!')}>Submit Property</Button>
+                <Button onClick={handleSubmit}>{isEditMode ? 'Save Changes' : 'Submit Listing'}</Button>
             </div>
         </div>
     );
 };
 
-const PropertyManagementCard: React.FC<{property: Property}> = ({ property }) => {
-    const statusStyles: { [key in Property['status']]: string } = {
+interface ListingManagementCardProps {
+    listing: Listing;
+    onViewListing: (listing: Listing) => void;
+    onEdit: () => void;
+}
+
+const ListingManagementCard: React.FC<ListingManagementCardProps> = ({ listing, onViewListing, onEdit }) => {
+    const statusStyles: { [key in Listing['status']]: string } = {
         Available: 'bg-green-100 text-green-800',
         Rented: 'bg-red-100 text-red-800',
         Pending: 'bg-yellow-100 text-yellow-800',
         'Under Maintenance': 'bg-blue-100 text-blue-800',
+        Sold: 'bg-gray-100 text-gray-800',
     };
     
     return (
         <div className="bg-white rounded-lg shadow-md overflow-hidden mb-4">
             <div className="flex">
-                <img src={property.imageUrl} alt={property.title} className="w-28 h-28 object-cover" />
+                <img src={listing.imageUrl} alt={listing.title} className="w-28 h-28 object-cover" />
                 <div className="p-3 flex-grow">
                      <div className="flex justify-between items-start">
-                        <h3 className="font-heading text-base font-semibold text-text-primary pr-2">{property.title}</h3>
-                        <span className={`text-xs font-semibold px-2 py-0.5 mt-0.5 rounded-full ${statusStyles[property.status]}`}>
-                            {property.status}
+                        <h3 className="font-heading text-base font-semibold text-text-primary pr-2">{listing.title}</h3>
+                        <span className={`text-xs font-semibold px-2 py-0.5 mt-0.5 rounded-full ${statusStyles[listing.status]}`}>
+                            {listing.status}
                         </span>
                     </div>
-                    <p className="font-heading text-primary font-bold text-sm my-1">MK {property.price.toLocaleString()}</p>
+                    <p className="font-heading text-primary font-bold text-sm my-1">MK {listing.price.toLocaleString()}</p>
                     <div className="flex items-center text-text-secondary text-xs">
                         <MapPinIcon className="w-3 h-3 mr-1" />
-                        <span>{property.location}</span>
+                        <span>{listing.location}</span>
                     </div>
                 </div>
             </div>
             <div className="border-t border-border-soft flex">
-                <button className="flex-1 p-2 text-center text-sm font-semibold text-primary hover:bg-primary/10">View Listing</button>
-                <button className="flex-1 p-2 border-l border-border-soft text-center text-sm font-semibold text-text-secondary hover:bg-gray-100">Edit</button>
+                <button onClick={() => onViewListing(listing)} className="flex-1 p-2 text-center text-sm font-semibold text-primary hover:bg-primary/10">View Listing</button>
+                <button onClick={onEdit} className="flex-1 p-2 border-l border-border-soft text-center text-sm font-semibold text-text-secondary hover:bg-gray-100">Edit</button>
             </div>
         </div>
     );
 };
 
-export const ManagePropertiesScreen: React.FC = () => {
-    const { setCurrentScreen, userRole } = useAppContext();
-    const addScreen = userRole === UserRole.LANDLORD ? Screen.ADD_PROPERTY : Screen.ADD_PROPERTY;
+export const ManageListingsScreen: React.FC = () => {
+    const { setCurrentScreen, setSelectedListing, setListingToEdit } = useAppContext();
 
-    const propertiesByLandlord = MOCK_PROPERTIES.reduce((acc, property) => {
-        const group = acc[property.landlordId] || { name: property.landlordName, properties: [] };
-        group.properties.push(property);
-        acc[property.landlordId] = group;
-        return acc;
-    }, {} as Record<number, {name: string, properties: Property[]}>);
+    const handleViewListing = (listing: Listing) => {
+        setSelectedListing(listing);
+        setCurrentScreen(Screen.LISTING_DETAILS);
+    };
+
+    const handleEdit = (listing: Listing) => {
+        setListingToEdit(listing);
+        setCurrentScreen(Screen.ADD_LISTING);
+    };
+
+    // Mock: Assume logged in seller is ID 1
+    const mylistings = MOCK_LISTINGS.filter(p => p.sellerId === 1); 
 
     return (
         <div className="flex flex-col h-full bg-secondary">
              <div className="p-4 sticky top-0 bg-secondary/80 backdrop-blur-sm z-10 border-b border-border-soft">
-                <h1 className="font-heading text-xl font-semibold text-text-primary">{userRole === UserRole.AGENT ? 'Managed Properties' : 'My Properties'}</h1>
+                <h1 className="font-heading text-xl font-semibold text-text-primary">My Listings</h1>
             </div>
             <div className="flex-grow overflow-y-auto p-4 scrollbar-hide">
-                {userRole === UserRole.AGENT ? (
-                    Object.values(propertiesByLandlord).map(landlordGroup => (
-                        <div key={landlordGroup.name} className="mb-6">
-                            <div className="flex items-center mb-3">
-                                <BuildingIcon className="w-5 h-5 text-text-secondary mr-2" />
-                                <h2 className="font-heading text-lg font-semibold text-text-primary">{landlordGroup.name}</h2>
-                            </div>
-                            {landlordGroup.properties.map(prop => <PropertyManagementCard key={prop.id} property={prop} />)}
-                        </div>
-                    ))
-                ) : (
-                    MOCK_PROPERTIES
-                    .filter(p => p.landlordId === 1) // Mock: Assume logged in landlord is ID 1
-                    .map(prop => <PropertyManagementCard key={prop.id} property={prop} />)
-                )}
+                {mylistings.map(listing => <ListingManagementCard key={listing.id} listing={listing} onViewListing={handleViewListing} onEdit={() => handleEdit(listing)} />)}
             </div>
             <div className="absolute bottom-20 right-4">
-                <button onClick={() => setCurrentScreen(addScreen)} className="bg-primary text-white p-4 rounded-full shadow-lg hover:bg-green-700 transition-transform hover:scale-110">
+                <button onClick={() => setCurrentScreen(Screen.ADD_LISTING)} className="bg-primary text-white p-4 rounded-full shadow-lg hover:bg-green-700 transition-transform hover:scale-110">
                     <PlusCircleIcon className="w-6 h-6" />
                 </button>
             </div>
@@ -941,13 +1390,11 @@ export const ManagePropertiesScreen: React.FC = () => {
     );
 };
 
-export const AgentPropertyManagementScreen: React.FC = () => <ManagePropertiesScreen />;
-
 export const NotificationsScreen: React.FC = () => {
     const { setCurrentScreen } = useAppContext();
     return (
         <div className="flex flex-col h-full bg-secondary">
-            <Header title="Notifications" onBack={() => setCurrentScreen(Screen.TENANT_HOME)} />
+            <Header title="Notifications" onBack={() => setCurrentScreen(Screen.HOME_SCREEN)} />
             <div className="flex-grow overflow-y-auto scrollbar-hide">
                 {MOCK_NOTIFICATIONS.length > 0 ? (
                     <div className="divide-y divide-border-soft">
@@ -982,18 +1429,18 @@ export const RulesAndPoliciesScreen: React.FC = () => {
     const { setCurrentScreen } = useAppContext();
     return (
         <div className="flex flex-col h-full bg-secondary">
-            <Header title="Rules & Policies" onBack={() => setCurrentScreen(Screen.TENANT_PROFILE)} />
+            <Header title="Rules & Policies" onBack={() => setCurrentScreen(Screen.PROFILE)} />
             <div className="flex-grow overflow-y-auto p-6 prose prose-sm max-w-none scrollbar-hide">
                 <h2 className="font-heading font-semibold">Community Guidelines</h2>
-                <p>Welcome to NyumbaNow. To ensure a safe and respectful community, we require all users to adhere to the following guidelines...</p>
+                <p>Welcome to MarketPaLine. To ensure a safe and respectful community, we require all users to adhere to the following guidelines...</p>
                 <h3>1. Be Respectful</h3>
-                <p>Treat all users—tenants, landlords, and agents—with courtesy and professionalism. Harassment, discrimination, or hate speech will not be tolerated.</p>
+                <p>Treat all users with courtesy and professionalism. Harassment, discrimination, or hate speech will not be tolerated.</p>
                 <h3>2. Provide Accurate Information</h3>
-                <p>Ensure all property listings, personal details, and communications are truthful and accurate. Misrepresentation can lead to account suspension.</p>
+                <p>Ensure all listings, personal details, and communications are truthful and accurate. Misrepresentation can lead to account suspension.</p>
                 <h3>3. No Scamming or Fraud</h3>
                 <p>Any attempts at fraudulent activities, including fake listings or phishing attempts, will result in an immediate ban and may be reported to law enforcement.</p>
                  <h2 className="font-heading font-semibold mt-6">Terms of Service</h2>
-                <p>By using NyumbaNow, you agree to our full terms of service. This includes agreements regarding payments, disputes, and data privacy...</p>
+                <p>By using MarketPaLine, you agree to our full terms of service. This includes agreements regarding payments, disputes, and data privacy...</p>
             </div>
         </div>
     );
@@ -1002,17 +1449,17 @@ export const RulesAndPoliciesScreen: React.FC = () => {
 export const SettingsScreen: React.FC = () => {
     const { setCurrentScreen } = useAppContext();
     const settingsItems = [
-        { label: 'Notifications', icon: BellIcon },
-        { label: 'Privacy & Security', icon: UserIcon },
-        { label: 'Help & Support', icon: InfoIcon },
+        { label: 'Notifications', icon: BellIcon, action: () => setCurrentScreen(Screen.NOTIFICATIONS) },
+        { label: 'Privacy & Security', icon: UserIcon, action: () => alert('Privacy & Security settings coming soon!') },
+        { label: 'Help & Support', icon: InfoIcon, action: () => alert('Help & Support section coming soon!') },
     ];
     return (
         <div className="flex flex-col h-full bg-secondary">
-            <Header title="Settings" onBack={() => setCurrentScreen(Screen.TENANT_PROFILE)} />
+            <Header title="Settings" onBack={() => setCurrentScreen(Screen.PROFILE)} />
             <div className="flex-grow overflow-y-auto scrollbar-hide p-4">
                  <div className="bg-white rounded-lg shadow-sm">
                     {settingsItems.map((item, index) => (
-                         <button key={item.label} className={`w-full flex items-center p-4 text-left ${index < settingsItems.length - 1 ? 'border-b border-border-soft' : ''}`}>
+                         <button key={item.label} onClick={item.action} className={`w-full flex items-center p-4 text-left ${index < settingsItems.length - 1 ? 'border-b border-border-soft' : ''}`}>
                             <item.icon className="w-6 h-6 mr-4 text-primary" />
                             <span className="flex-grow font-semibold text-text-primary">{item.label}</span>
                             <ChevronRightIcon className="w-5 h-5 text-text-secondary" />
@@ -1028,15 +1475,42 @@ export const AboutScreen: React.FC = () => {
     const { setCurrentScreen } = useAppContext();
     return (
         <div className="flex flex-col h-full bg-secondary">
-            <Header title="About NyumbaNow" onBack={() => setCurrentScreen(Screen.TENANT_PROFILE)} />
+            <Header title="About MarketPaLine" onBack={() => setCurrentScreen(Screen.PROFILE)} />
             <div className="flex-grow p-6 text-center flex flex-col items-center justify-center">
-                <NyumbaNowLogo className="w-20 h-20 text-primary mb-4" />
-                <h1 className="text-3xl font-bold font-heading text-text-primary">NyumbaNow</h1>
-                <p className="text-sm text-text-secondary mt-1">Version 1.0.0</p>
+                <MarketPaLineLogo className="w-20 h-20 text-primary mb-4" />
+                <h1 className="text-3xl font-bold font-heading text-text-primary">MarketPaLine</h1>
+                <p className="text-sm text-text-secondary mt-1">Version 2.0.0</p>
                 <p className="mt-6 max-w-xs">
-                    NyumbaNow is a modern, minimal house rental application for Malawi, connecting tenants, landlords, and agents to find and manage properties efficiently.
+                    MarketPaLine is a modern marketplace for Malawi, connecting people to buy, sell, and rent goods and services.
                 </p>
-                <p className="text-xs text-gray-400 mt-12">© 2024 NyumbaNow. All rights reserved.</p>
+                <p className="text-xs text-gray-400 mt-12">© 2024 MarketPaLine. All rights reserved.</p>
+            </div>
+        </div>
+    );
+};
+
+export const EditProfileScreen: React.FC = () => {
+    const { setCurrentScreen } = useAppContext();
+
+    return (
+        <div className="flex flex-col h-full bg-secondary">
+            <Header title="Edit Profile" onBack={() => setCurrentScreen(Screen.PROFILE)} />
+            <div className="flex-grow overflow-y-auto p-4 scrollbar-hide">
+                <div className="flex flex-col items-center mb-6">
+                    <div className="w-24 h-24 rounded-full bg-gray-300 mb-4 flex items-center justify-center relative group">
+                         <UserIcon className="w-12 h-12 text-gray-500" />
+                         <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                            <CameraIcon className="w-8 h-8 text-white" />
+                         </div>
+                    </div>
+                </div>
+                <InputField label="Full Name" id="fullName" type="text" defaultValue="John Doe" />
+                <InputField label="Email Address" id="email" type="email" defaultValue="example@email.com" />
+                <InputField label="Phone Number" id="phone" type="tel" defaultValue="+256 123 456 789" />
+
+                <div className="mt-6">
+                    <Button onClick={() => setCurrentScreen(Screen.PROFILE)}>Save Changes</Button>
+                </div>
             </div>
         </div>
     );

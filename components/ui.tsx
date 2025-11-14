@@ -1,8 +1,8 @@
 
 import React from 'react';
 import { useAppContext } from '../App';
-import { Screen, UserRole, Property } from '../types';
-import { HouseIcon, HeartIcon, MessageSquareIcon, UserIcon, MapPinIcon, BedIcon, BathIcon, ChevronLeftIcon, BellIcon, PlusCircleIcon } from '../constants';
+import { Screen, UserRole, Listing, Review } from '../types';
+import { HouseIcon, HeartIcon, MessageSquareIcon, UserIcon, MapPinIcon, BedIcon, BathIcon, ChevronLeftIcon, BellIcon, PlusCircleIcon, StarIcon, ListIcon } from '../constants';
 
 // --- Button Component ---
 interface ButtonProps {
@@ -10,63 +10,73 @@ interface ButtonProps {
   children: React.ReactNode;
   variant?: 'primary' | 'outline';
   className?: string;
+  disabled?: boolean;
 }
 
-export const Button: React.FC<ButtonProps> = ({ onClick, children, variant = 'primary', className = '' }) => {
-  const baseClasses = "w-full py-3 rounded-lg font-heading font-semibold transition-colors duration-300 text-center";
+export const Button: React.FC<ButtonProps> = ({ onClick, children, variant = 'primary', className = '', disabled = false }) => {
+  const baseClasses = "w-full py-3 rounded-lg font-heading font-semibold transition-colors duration-300 text-center disabled:opacity-50 disabled:cursor-not-allowed";
   const primaryClasses = "bg-primary text-white hover:bg-green-700";
   const outlineClasses = "bg-transparent border-2 border-primary text-primary hover:bg-primary/10";
 
   return (
-    <button onClick={onClick} className={`${baseClasses} ${variant === 'primary' ? primaryClasses : outlineClasses} ${className}`}>
+    <button onClick={onClick} disabled={disabled} className={`${baseClasses} ${variant === 'primary' ? primaryClasses : outlineClasses} ${className}`}>
       {children}
     </button>
   );
 };
 
-// --- Property Card Component ---
-interface PropertyCardProps {
-  property: Property;
+// --- Listing Card Component ---
+interface ListingCardProps {
+  listing: Listing;
   onClick: () => void;
 }
 
-export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onClick }) => {
+export const ListingCard: React.FC<ListingCardProps> = ({ listing, onClick }) => {
+  const priceSuffix = listing.priceType === 'per month' ? '/month' : listing.priceType === 'per day' ? '/day' : '';
+  
   return (
     <div onClick={onClick} className="bg-white rounded-lg shadow-md overflow-hidden mb-4 cursor-pointer transition-transform hover:scale-105">
-      <img src={property.imageUrl} alt={property.title} className="w-full h-40 object-cover" />
+      <img src={listing.imageUrl} alt={listing.title} className="w-full h-40 object-cover" />
       <div className="p-4">
-        <h3 className="font-heading text-lg font-semibold text-text-primary">{property.title}</h3>
-        <p className="font-heading text-primary font-bold text-md my-1">MK {property.price.toLocaleString()}/month</p>
+        <h3 className="font-heading text-lg font-semibold text-text-primary">{listing.title}</h3>
+        <p className="font-heading text-primary font-bold text-md my-1">MK {listing.price.toLocaleString()}{priceSuffix}</p>
         <div className="flex items-center text-text-secondary text-sm mb-2">
           <MapPinIcon className="w-4 h-4 mr-1" />
-          <span>{property.location}</span>
+          <span>{listing.location}</span>
         </div>
-        <div className="flex items-center text-text-secondary text-sm space-x-4">
-          <div className="flex items-center">
-            <BedIcon className="w-4 h-4 mr-1" />
-            <span>{property.bedrooms} Beds</span>
-          </div>
-          <div className="flex items-center">
-            <BathIcon className="w-4 h-4 mr-1" />
-            <span>{property.bathrooms} Baths</span>
-          </div>
-        </div>
+        {(listing.bedrooms || listing.bathrooms) && (
+            <div className="flex items-center text-text-secondary text-sm space-x-4">
+            {listing.bedrooms && (
+                <div className="flex items-center">
+                    <BedIcon className="w-4 h-4 mr-1" />
+                    <span>{listing.bedrooms} Beds</span>
+                </div>
+            )}
+            {listing.bathrooms && (
+                <div className="flex items-center">
+                    <BathIcon className="w-4 h-4 mr-1" />
+                    <span>{listing.bathrooms} Baths</span>
+                </div>
+            )}
+            </div>
+        )}
       </div>
     </div>
   );
 };
 
-// --- Recommended Property Card Component ---
-export const RecommendedPropertyCard: React.FC<PropertyCardProps> = ({ property, onClick }) => {
+// --- Recommended Listing Card Component ---
+export const RecommendedListingCard: React.FC<ListingCardProps> = ({ listing, onClick }) => {
+  const priceSuffix = listing.priceType === 'per month' ? '/month' : listing.priceType === 'per day' ? '/day' : '';
   return (
     <div onClick={onClick} className="flex-shrink-0 w-64 bg-white rounded-lg shadow-md overflow-hidden cursor-pointer transition-transform hover:scale-105">
-      <img src={property.imageUrl} alt={property.title} className="w-full h-32 object-cover" />
+      <img src={listing.imageUrl} alt={listing.title} className="w-full h-32 object-cover" />
       <div className="p-3">
-        <h3 className="font-heading text-base font-semibold text-text-primary truncate">{property.title}</h3>
-        <p className="font-heading text-primary font-bold text-sm my-1">MK {property.price.toLocaleString()}/month</p>
+        <h3 className="font-heading text-base font-semibold text-text-primary truncate">{listing.title}</h3>
+        <p className="font-heading text-primary font-bold text-sm my-1">MK {listing.price.toLocaleString()}{priceSuffix}</p>
         <div className="flex items-center text-text-secondary text-xs">
           <MapPinIcon className="w-3 h-3 mr-1" />
-          <span className="truncate">{property.location}</span>
+          <span className="truncate">{listing.location}</span>
         </div>
       </div>
     </div>
@@ -104,25 +114,19 @@ export const BottomNavBar: React.FC = () => {
 
     const getNavItems = () => {
         switch (userRole) {
-            case UserRole.TENANT:
+            case UserRole.BUYER:
                 return [
-                    { screen: Screen.TENANT_HOME, icon: HouseIcon, label: 'Home' },
+                    { screen: Screen.HOME_SCREEN, icon: HouseIcon, label: 'Home' },
                     { screen: Screen.FAVORITES, icon: HeartIcon, label: 'Favorites' },
                     { screen: Screen.MESSAGES, icon: MessageSquareIcon, label: 'Messages' },
-                    { screen: Screen.TENANT_PROFILE, icon: UserIcon, label: 'Profile' },
+                    { screen: Screen.PROFILE, icon: UserIcon, label: 'Profile' },
                 ];
-            case UserRole.LANDLORD:
+            case UserRole.SELLER:
                 return [
-                    { screen: Screen.LANDLORD_DASHBOARD, icon: HouseIcon, label: 'Dashboard' },
-                    { screen: Screen.MANAGE_PROPERTIES, icon: PlusCircleIcon, label: 'Properties' },
+                    { screen: Screen.DASHBOARD, icon: HouseIcon, label: 'Dashboard' },
+                    { screen: Screen.MANAGE_LISTINGS, icon: ListIcon, label: 'Listings' },
                     { screen: Screen.MESSAGES, icon: MessageSquareIcon, label: 'Messages' },
-                    { screen: Screen.TENANT_PROFILE, icon: UserIcon, label: 'Profile' },
-                ];
-            case UserRole.AGENT:
-                return [
-                    { screen: Screen.AGENT_DASHBOARD, icon: HouseIcon, label: 'Dashboard' },
-                    { screen: Screen.AGENT_PROPERTY_MANAGEMENT, icon: PlusCircleIcon, label: 'Manage' },
-                    { screen: Screen.AGENT_PROFILE, icon: UserIcon, label: 'Profile' },
+                    { screen: Screen.PROFILE, icon: UserIcon, label: 'Profile' },
                 ];
             default:
                 return [];
@@ -146,6 +150,54 @@ export const BottomNavBar: React.FC = () => {
                     </button>
                 );
             })}
+        </div>
+    );
+};
+
+// --- Star Rating Component ---
+interface StarRatingProps {
+  rating: number;
+  totalStars?: number;
+  className?: string;
+}
+
+export const StarRating: React.FC<StarRatingProps> = ({ rating, totalStars = 5, className = '' }) => {
+    return (
+        <div className={`flex items-center ${className}`}>
+            {[...Array(totalStars)].map((_, index) => (
+                <StarIcon
+                    key={index}
+                    className={`w-4 h-4 ${index < Math.round(rating) ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
+                />
+            ))}
+        </div>
+    );
+};
+
+
+// --- Review Card Component ---
+interface ReviewCardProps {
+    review: Review;
+}
+
+export const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
+    return (
+        <div className="flex items-start space-x-4 py-4">
+            <img 
+                src={review.authorImageUrl || 'https://picsum.photos/seed/avatar/100'} 
+                alt={review.authorName} 
+                className="w-10 h-10 rounded-full bg-gray-200"
+            />
+            <div className="flex-1">
+                <div className="flex justify-between items-center">
+                    <div>
+                        <p className="font-semibold text-text-primary">{review.authorName}</p>
+                        <p className="text-xs text-text-secondary">{review.timestamp}</p>
+                    </div>
+                    <StarRating rating={review.rating} />
+                </div>
+                <p className="text-text-secondary mt-2 text-sm">{review.comment}</p>
+            </div>
         </div>
     );
 };
