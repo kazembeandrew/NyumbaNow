@@ -1,5 +1,5 @@
 
-import React, { useState, createContext, useContext } from 'react';
+import React, { useState, createContext, useContext, useEffect } from 'react';
 import { Screen, UserRole, Listing, AppContextType, ChatPartner } from './types';
 import { 
   SplashScreen, LoginScreen, RoleSelectionScreen, HomeScreen, ListingDetailsScreen,
@@ -27,7 +27,13 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [postLoginRedirect, setPostLoginRedirect] = useState<Screen | null>(null);
   const [listingToEdit, setListingToEdit] = useState<Listing | null>(null);
+  const [dataSaverMode, setDataSaverMode] = useState<boolean>(() => {
+    return localStorage.getItem('nyumbanow_datasaver') === 'true';
+  });
 
+  useEffect(() => {
+    localStorage.setItem('nyumbanow_datasaver', dataSaverMode.toString());
+  }, [dataSaverMode]);
 
   const contextValue: AppContextType = {
     currentScreen,
@@ -44,6 +50,8 @@ const App: React.FC = () => {
     setPostLoginRedirect,
     listingToEdit,
     setListingToEdit,
+    dataSaverMode,
+    setDataSaverMode
   };
 
   const renderScreen = () => {

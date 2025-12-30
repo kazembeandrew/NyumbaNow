@@ -14,8 +14,15 @@ export const useListings = () => {
     // 1. Load from cache first for "Instant-On" feel
     const cachedData = localStorage.getItem(CACHE_KEY);
     if (cachedData) {
-      setListings(JSON.parse(cachedData));
-      setLoading(false);
+      try {
+        const parsed = JSON.parse(cachedData);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setListings(parsed);
+          setLoading(false);
+        }
+      } catch (e) {
+        console.warn("Cache corrupted, ignoring...");
+      }
     }
 
     fetchListings();
@@ -23,13 +30,17 @@ export const useListings = () => {
 
   const fetchListings = async () => {
     try {
-      // 2. Background fetch
-      const data = await listingService.getPaginated(0, 20);
+      setError(null);
+      const data = await listingService.getPaginated(0, 50); // Fetch more for better discovery
+      
+      console.log(`Successfully fetched ${data.length} listings from Supabase.`);
+      
       setListings(data);
-      // 3. Update cache
+      // Update cache
       localStorage.setItem(CACHE_KEY, JSON.stringify(data));
     } catch (e: any) {
-      if (listings.length === 0) setError(e.message);
+      console.error("Hook Fetch Failure:", e.message || e);
+      setError(e.message || "Failed to load houses. Please check your connection.");
     } finally {
       setLoading(false);
     }

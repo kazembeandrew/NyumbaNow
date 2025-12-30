@@ -52,19 +52,28 @@ interface ListingCardProps {
 }
 
 export const ListingCard: React.FC<ListingCardProps> = ({ listing, onClick }) => {
+  const { dataSaverMode } = useAppContext();
+
   return (
     <div 
         onClick={onClick} 
         className={`bg-white rounded-2xl shadow-sm border overflow-hidden mb-4 cursor-pointer transition-all active:scale-95 group ${listing.is_promoted ? 'border-amber-400 ring-1 ring-amber-100 shadow-amber-50' : 'border-border-soft'}`}
     >
-      <div className="relative h-48 bg-gray-100">
-        <img 
-            src={getOptimizedImageUrl(listing.imageUrl, 600)} 
-            alt={listing.title} 
-            loading="lazy"
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-        />
-        <div className="absolute top-3 left-3 flex gap-2">
+      <div className={`relative ${dataSaverMode ? 'h-12 bg-secondary flex items-center px-4' : 'h-48 bg-gray-100'}`}>
+        {!dataSaverMode ? (
+            <img 
+                src={getOptimizedImageUrl(listing.imageUrl, 600)} 
+                alt={listing.title} 
+                loading="lazy"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+            />
+        ) : (
+            <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-primary rounded-full"></div>
+                <span className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">Image Hidden (Data Saver)</span>
+            </div>
+        )}
+        <div className={`absolute top-3 left-3 flex gap-2 ${dataSaverMode ? 'hidden' : ''}`}>
             {listing.isVerified && (
                 <span className="bg-white/90 backdrop-blur-sm text-primary text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 shadow-sm border border-primary/20">
                     <ShieldCheckIcon className="w-3 h-3" /> VERIFIED
@@ -76,12 +85,17 @@ export const ListingCard: React.FC<ListingCardProps> = ({ listing, onClick }) =>
                 </span>
             )}
         </div>
-        <div className="absolute bottom-3 right-3 bg-primary text-white px-3 py-1 rounded-lg font-bold text-sm shadow-lg">
-            MK {listing.price.toLocaleString()}
-        </div>
+        {!dataSaverMode && (
+            <div className="absolute bottom-3 right-3 bg-primary text-white px-3 py-1 rounded-lg font-bold text-sm shadow-lg">
+                MK {listing.price.toLocaleString()}
+            </div>
+        )}
       </div>
       <div className="p-4">
-        <h3 className="font-heading text-lg font-bold text-text-primary mb-1 truncate">{listing.title}</h3>
+        <div className="flex justify-between items-start mb-1">
+            <h3 className="font-heading text-lg font-bold text-text-primary truncate flex-grow mr-2">{listing.title}</h3>
+            {dataSaverMode && <span className="text-primary font-bold text-sm shrink-0">MK {listing.price.toLocaleString()}</span>}
+        </div>
         <div className="flex items-center text-text-secondary text-xs mb-3">
           <MapPinIcon className="w-3.5 h-3.5 mr-1 text-primary" />
           <span className="truncate">{listing.location}</span>

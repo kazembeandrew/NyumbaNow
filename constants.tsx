@@ -11,6 +11,27 @@ export const NyumbaNowLogo = (props: React.SVGProps<SVGSVGElement>) => (
     </svg>
 );
 
+export const AirtelLogo = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
+        <circle cx="12" cy="12" r="10" fill="#FF0000" />
+        <text x="12" y="16" fontSize="12" fontWeight="bold" fill="white" textAnchor="middle">A</text>
+    </svg>
+);
+
+export const TNMLogo = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
+        <circle cx="12" cy="12" r="10" fill="#00A859" />
+        <text x="12" y="16" fontSize="12" fontWeight="bold" fill="white" textAnchor="middle">T</text>
+    </svg>
+);
+
+export const WhatsAppIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 1 1-7.6-11.7 8.38 8.38 0 0 1 3.8.9L21 3.5Z"></path>
+    <path d="M11 15c-2.5-1-4-2.5-5-5"></path>
+  </svg>
+);
+
 export const HouseIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
@@ -175,7 +196,7 @@ export const LoaderIcon = (props: React.SVGProps<SVGSVGElement>) => (
 );
 
 export const ArrowDownIcon = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"/></svg>
 );
 
 export const SortIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -191,7 +212,7 @@ export const StarIcon = (props: React.SVGProps<SVGSVGElement>) => (
 );
 
 export const CarIcon = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M14 16H9m10 0h1.34a2 2 0 0 0 1.9-2.37L20.1 8.23a2.5 2.5 0 0 0-2.3-1.73H6.2a2.5 2.5 0 0 0-2.3 1.73L2.76 13.63A2 2 0 0 0 4.66 16H5m0 0v2m14-2v2m-7-5a2.5 2.5 0 0 1-5 0V9.5a2.5 2.5 0 0 1 5 0V11Z"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M14 16H9m10 0h1.34a2 2 0 0 0-1.9-2.37L20.1 8.23a2.5 2.5 0 0 0-2.3-1.73H6.2a2.5 2.5 0 0 0-2.3 1.73L2.76 13.63A2 2 0 0 0 4.66 16H5m0 0v2m14-2v2m-7-5a2.5 2.5 0 0 1-5 0V9.5a2.5 2.5 0 0 1 5 0V11Z"/></svg>
 );
 
 export const BriefcaseIcon = (props: React.SVGProps<SVGSVGElement>) => (

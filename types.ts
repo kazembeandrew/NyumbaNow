@@ -130,4 +130,6 @@ export interface AppContextType {
   setPostLoginRedirect: (screen: Screen | null) => void;
   listingToEdit: Listing | null;
   setListingToEdit: (listing: Listing | null) => void;
+  dataSaverMode: boolean;
+  setDataSaverMode: (mode: boolean) => void;
 }
