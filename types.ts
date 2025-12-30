@@ -25,6 +25,24 @@ export enum Screen {
   ABOUT,
   BOOKINGS,
   BOOST_LISTING,
+  AI_SEARCH,
+}
+
+// Added missing Notification interface to fix error in constants.tsx
+export interface Notification {
+  id: number;
+  title: string;
+  body: string;
+  timestamp: string;
+}
+
+// Added missing Review interface to fix error in components/ui.tsx and constants.tsx
+export interface Review {
+  id: string;
+  authorName: string;
+  rating: number;
+  comment: string;
+  timestamp: string;
 }
 
 export interface Booking {
@@ -39,30 +57,22 @@ export interface Booking {
   listing_image: string;
 }
 
-export interface Landlord {
-  id: number;
-  name: string;
+export interface Message {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  conversation_id: string;
+  text: string;
+  created_at: string;
 }
 
-export interface Review {
-  id: number;
-  authorName: string;
-  authorImageUrl?: string;
-  rating: number; // 1-5
-  comment: string;
-  timestamp: string;
-}
-
-export enum ListingCategory {
-  HOUSE_RENTAL = 'House Rentals',
-  BEDROOM_RENTAL = 'Bedroom Rentals',
-  EVENT_VENUE_HIRE = 'Event Venues',
-  CAR_HIRE = 'Car Hire',
-  EQUIPMENT_HIRE = 'Equipment Hire',
-  LAND_SALE = 'Land for Sale',
-  HOUSE_SALE = 'Houses for Sale',
-  CAR_SALE = 'Cars for Sale',
-  ELECTRONICS_SALE = 'Electronics for Sale',
+export interface Conversation {
+  id: string;
+  tenant_id: string;
+  landlord_id: string;
+  listing_id: number;
+  last_message?: string;
+  updated_at: string;
 }
 
 export interface Listing {
@@ -82,37 +92,14 @@ export interface Listing {
   bathrooms?: number;
   phoneNumber?: string;
   email?: string;
-  reviews?: Review[];
   amenities?: string[];
   isVerified?: boolean;
   is_promoted?: boolean;
 }
 
-export interface Message {
-  id: string | number;
-  sender_id: string;
-  receiver_id: string;
-  text: string;
-  created_at: string;
-}
-
-export interface ChatPartner {
-  id: string;
-  name: string;
-}
-
-export interface Conversation {
-  id: string;
-  partner_name: string;
-  last_message: string;
-  partner_id: string;
-}
-
-export interface Notification {
-  id: number;
-  title: string;
-  body: string;
-  timestamp: string;
+export enum ListingCategory {
+  HOUSE_RENTAL = 'House Rentals',
+  BEDROOM_RENTAL = 'Bedroom Rentals',
 }
 
 export interface AppContextType {
@@ -122,14 +109,8 @@ export interface AppContextType {
   setUserRole: (role: UserRole) => void;
   selectedListing: Listing | null;
   setSelectedListing: (listing: Listing | null) => void;
-  activeChatPartner: ChatPartner | null;
-  setActiveChatPartner: (partner: ChatPartner | null) => void;
   isAuthenticated: boolean;
   setIsAuthenticated: (isAuthenticated: boolean) => void;
-  postLoginRedirect: Screen | null;
-  setPostLoginRedirect: (screen: Screen | null) => void;
-  listingToEdit: Listing | null;
-  setListingToEdit: (listing: Listing | null) => void;
   dataSaverMode: boolean;
   setDataSaverMode: (mode: boolean) => void;
 }
