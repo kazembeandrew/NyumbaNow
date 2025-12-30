@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MarketPaLine</title>
+    <title>NyumbaNow - Malawi's House Rental App</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,96 +14,37 @@
         theme: {
           extend: {
             colors: {
-              primary: '#009639',
-              secondary: '#F7F7F7',
-              'text-primary': '#000000',
-              'text-secondary': '#555555',
-              'border-soft': '#E5E55E',
+              primary: '#0066FF', // Updated to a modern blue for "NyumbaNow"
+              secondary: '#F8F9FA',
+              'text-primary': '#1A1A1A',
+              'text-secondary': '#666666',
+              'border-soft': '#E9ECEF',
             },
             fontFamily: {
               sans: ['Roboto', 'sans-serif'],
               heading: ['Poppins', 'sans-serif'],
-            },
-            animation: {
-              shimmer: 'shimmer 1.5s infinite linear',
-            },
-            keyframes: {
-              shimmer: {
-                '0%': { transform: 'translateX(-100%)' },
-                '100%': { transform: 'translateX(100%)' },
-              },
             },
           },
         },
       }
     </script>
     <style>
-      .splash-logo path, .splash-logo polyline, .splash-logo rect {
+      .splash-logo path {
         stroke-dasharray: 500;
         stroke-dashoffset: 500;
         animation: draw-logo 1.5s ease-in-out forwards;
       }
-
-      .splash-logo {
-        animation: fill-logo 0.5s ease-in forwards 1.2s;
-      }
-
-      @keyframes draw-logo {
-        to {
-          stroke-dashoffset: 0;
-        }
-      }
-      
-      @keyframes fill-logo {
-        from {
-          fill: transparent;
-        }
-        to {
-          fill: #009639;
-        }
-      }
-
-      .splash-text {
-        opacity: 0;
-        transform: translateY(10px);
-        animation: fade-in-up 0.7s ease-out forwards;
-      }
-
-      #splash-title {
-        animation-delay: 1.5s;
-      }
-      #splash-subtitle {
-        animation-delay: 1.7s;
-      }
-
-      @keyframes fade-in-up {
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      .animate-fade-in-up {
-        opacity: 0;
-        transform: translateY(15px);
-        animation: fade-in-up 0.4s ease-out forwards;
-      }
-
-      /* Utility to hide scrollbars */
-      .scrollbar-hide::-webkit-scrollbar {
-        display: none;
-      }
-      .scrollbar-hide {
-        -ms-overflow-style: none;  /* IE and Edge */
-        scrollbar-width: none;  /* Firefox */
-      }
+      @keyframes draw-logo { to { stroke-dashoffset: 0; } }
+      .scrollbar-hide::-webkit-scrollbar { display: none; }
+      .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
   <script type="importmap">
 {
   "imports": {
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0"
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
   }
 }
 </script>

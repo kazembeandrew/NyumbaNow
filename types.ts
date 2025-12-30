@@ -1,5 +1,4 @@
 
-
 export enum UserRole {
   BUYER = 'Buyer',
   SELLER = 'Seller',
@@ -14,6 +13,7 @@ export enum Screen {
   LISTING_DETAILS,
   FAVORITES,
   MESSAGES,
+  CHAT_ROOM,
   PROFILE,
   DASHBOARD,
   ADD_LISTING,
@@ -23,6 +23,20 @@ export enum Screen {
   SETTINGS,
   EDIT_PROFILE,
   ABOUT,
+  BOOKINGS,
+  BOOST_LISTING,
+}
+
+export interface Booking {
+  id: string;
+  listing_id: number;
+  tenant_id: string;
+  landlord_id: string;
+  viewing_date: string;
+  time_slot: 'Morning' | 'Afternoon' | 'Evening';
+  status: 'Pending' | 'Confirmed' | 'Cancelled' | 'Completed';
+  listing_title: string;
+  listing_image: string;
 }
 
 export interface Landlord {
@@ -55,13 +69,13 @@ export interface Listing {
   id: number;
   title: string;
   price: number;
-  priceType: 'per month' | 'per day' | 'one-time';
+  priceType: 'per month' | 'per day' | 'one-time' | 'rent';
   location: string;
   imageUrl: string;
   description: string;
   images: string[];
   status: 'Available' | 'Rented' | 'Pending' | 'Under Maintenance' | 'Sold';
-  sellerId: number;
+  sellerId: string;
   sellerName: string;
   category: ListingCategory;
   bedrooms?: number;
@@ -69,20 +83,29 @@ export interface Listing {
   phoneNumber?: string;
   email?: string;
   reviews?: Review[];
+  amenities?: string[];
+  isVerified?: boolean;
+  is_promoted?: boolean;
 }
 
 export interface Message {
-  id: number;
-  sender: 'me' | 'other';
+  id: string | number;
+  sender_id: string;
+  receiver_id: string;
   text: string;
-  timestamp: string;
+  created_at: string;
+}
+
+export interface ChatPartner {
+  id: string;
+  name: string;
 }
 
 export interface Conversation {
-  id: number;
-  name: string;
-  lastMessage: string;
-  avatarUrl: string;
+  id: string;
+  partner_name: string;
+  last_message: string;
+  partner_id: string;
 }
 
 export interface Notification {
@@ -99,6 +122,8 @@ export interface AppContextType {
   setUserRole: (role: UserRole) => void;
   selectedListing: Listing | null;
   setSelectedListing: (listing: Listing | null) => void;
+  activeChatPartner: ChatPartner | null;
+  setActiveChatPartner: (partner: ChatPartner | null) => void;
   isAuthenticated: boolean;
   setIsAuthenticated: (isAuthenticated: boolean) => void;
   postLoginRedirect: Screen | null;

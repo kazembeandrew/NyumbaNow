@@ -1,12 +1,11 @@
 
-
 import React, { useState, createContext, useContext } from 'react';
-import { Screen, UserRole, Listing, AppContextType } from './types';
+import { Screen, UserRole, Listing, AppContextType, ChatPartner } from './types';
 import { 
   SplashScreen, LoginScreen, RoleSelectionScreen, HomeScreen, ListingDetailsScreen,
-  FavoritesScreen, MessagesScreen, ProfileScreen, DashboardScreen, AddListingScreen,
+  FavoritesScreen, MessagesScreen, ChatRoomScreen, ProfileScreen, DashboardScreen, AddListingScreen,
   ManageListingsScreen, NotificationsScreen, RulesAndPoliciesScreen, SettingsScreen, 
-  AboutScreen, EditProfileScreen
+  AboutScreen, EditProfileScreen, BookingsScreen, BoostListingScreen
 } from './components/screens';
 import { BottomNavBar } from './components/ui';
 
@@ -24,6 +23,7 @@ const App: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.SPLASH);
   const [userRole, setUserRole] = useState<UserRole>(UserRole.NONE);
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
+  const [activeChatPartner, setActiveChatPartner] = useState<ChatPartner | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [postLoginRedirect, setPostLoginRedirect] = useState<Screen | null>(null);
   const [listingToEdit, setListingToEdit] = useState<Listing | null>(null);
@@ -36,6 +36,8 @@ const App: React.FC = () => {
     setUserRole,
     selectedListing,
     setSelectedListing,
+    activeChatPartner,
+    setActiveChatPartner,
     isAuthenticated,
     setIsAuthenticated,
     postLoginRedirect,
@@ -60,6 +62,8 @@ const App: React.FC = () => {
         return <FavoritesScreen />;
       case Screen.MESSAGES:
         return <MessagesScreen />;
+      case Screen.CHAT_ROOM:
+        return <ChatRoomScreen />;
       case Screen.PROFILE:
         return <ProfileScreen />;
       case Screen.DASHBOARD:
@@ -78,21 +82,21 @@ const App: React.FC = () => {
           return <EditProfileScreen />;
       case Screen.ABOUT:
           return <AboutScreen />;
+      case Screen.BOOKINGS:
+          return <BookingsScreen />;
+      case Screen.BOOST_LISTING:
+          return <BoostListingScreen />;
       default:
         return <HomeScreen />;
     }
   };
 
   const showNavBar = () => {
+    // Hide nav bar on specific screens
+    const hideOn = [Screen.SPLASH, Screen.LOGIN, Screen.ROLE_SELECTION, Screen.CHAT_ROOM, Screen.LISTING_DETAILS, Screen.ADD_LISTING, Screen.BOOST_LISTING];
+    if (hideOn.includes(currentScreen)) return false;
     if (!isAuthenticated) return false;
-
-    const buyerScreens = [Screen.HOME_SCREEN, Screen.FAVORITES, Screen.MESSAGES, Screen.PROFILE];
-    const sellerScreens = [Screen.DASHBOARD, Screen.MANAGE_LISTINGS, Screen.MESSAGES, Screen.PROFILE];
-
-    if (userRole === UserRole.BUYER && buyerScreens.includes(currentScreen)) return true;
-    if (userRole === UserRole.SELLER && sellerScreens.includes(currentScreen)) return true;
-    
-    return false;
+    return true;
   };
 
   return (

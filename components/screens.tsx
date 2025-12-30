@@ -1,1116 +1,690 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '../App';
-import { Screen, UserRole, Listing, Review, ListingCategory } from '../types';
-import { MOCK_LISTINGS, MOCK_LANDLORDS, MOCK_CONVERSATIONS, MOCK_MESSAGES, MOCK_NOTIFICATIONS, MarketPaLineLogo, HeartIcon, MessageSquareIcon, BellIcon, UserIcon, ChevronLeftIcon, MapPinIcon, BedIcon, BathIcon, MapIcon, ListIcon, PhoneIcon, SendIcon, ChevronRightIcon, SettingsIcon, FileTextIcon, InfoIcon, LogOutIcon, PlusCircleIcon, CameraIcon, BuildingIcon, CalendarIcon, LoaderIcon, ArrowDownIcon, ShareIcon, SortIcon, ChevronDownIcon, StarIcon, MailIcon, HouseIcon, CarIcon, BriefcaseIcon, TagIcon, CalendarDaysIcon, WifiIcon, ShieldIcon, ZapIcon, DropletIcon, GoogleIcon, FacebookIcon } from '../constants';
-import { Button, ListingCard, Header, RecommendedListingCard, StarRating, ReviewCard } from './ui';
+import { Screen, UserRole, Listing, Review, ListingCategory, Message, Conversation, Booking } from '../types';
+import { NyumbaNowLogo, HeartIcon, MessageSquareIcon, BellIcon, UserIcon, ChevronLeftIcon, MapPinIcon, BedIcon, BathIcon, MapIcon, ListIcon, PhoneIcon, SendIcon, ChevronRightIcon, SettingsIcon, LogOutIcon, PlusCircleIcon, CameraIcon, LoaderIcon, ArrowDownIcon, SortIcon, ChevronDownIcon, StarIcon, MailIcon, HouseIcon, CarIcon, BriefcaseIcon, ShieldCheckIcon, DropletsIcon, SunIcon, FilterIcon, CalendarIcon, ClockIcon, CheckCircleIcon } from '../constants';
+import { Button, ListingCard, Header, StarRating, ReviewCard, ListingSkeleton } from './ui';
+import { supabase } from '../supabaseClient';
+import { useListings } from '../hooks/useListings';
 
-// --- Reusable Form Field Components ---
+// --- Helper Functions ---
 
-const InputField = ({ label, id, ...props }: {label: string, id: string} & React.InputHTMLAttributes<HTMLInputElement>) => (
-    <div className="mb-4">
-        <label htmlFor={id} className="block text-sm font-medium text-text-secondary mb-1">{label}</label>
-        <input id={id} {...props} className="w-full px-4 py-3 rounded-lg border border-border-soft focus:ring-primary focus:border-primary" />
-    </div>
-);
+const dataURLtoBlob = (dataurl: string) => {
+    try {
+        const arr = dataurl.split(',');
+        const mimeMatch = arr[0].match(/:(.*?);/);
+        if (!mimeMatch) return null;
+        const mime = mimeMatch[1];
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) u8arr[n] = bstr.charCodeAt(n);
+        return new Blob([u8arr], { type: mime });
+    } catch (e) { return null; }
+};
 
-const TextAreaField = ({ label, id, ...props }: {label: string, id: string} & React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
-    <div className="mb-4">
-        <label htmlFor={id} className="block text-sm font-medium text-text-secondary mb-1">{label}</label>
-        <textarea id={id} {...props} className="w-full px-4 py-3 rounded-lg border border-border-soft focus:ring-primary focus:border-primary h-28 resize-none"></textarea>
-    </div>
-);
-
+const uploadImageToSupabase = async (base64Image: string): Promise<string | null> => {
+    try {
+        const blob = dataURLtoBlob(base64Image);
+        if (!blob) throw new Error("Invalid image data");
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+        const { error } = await supabase.storage.from('listings').upload(fileName, blob, { contentType: 'image/jpeg' });
+        if (error) throw error;
+        const { data: { publicUrl } } = supabase.storage.from('listings').getPublicUrl(fileName);
+        return publicUrl;
+    } catch (error) { return null; }
+};
 
 // --- Screen Components ---
 
 export const SplashScreen: React.FC = () => {
-  const { setCurrentScreen } = useAppContext();
-
+  const { setCurrentScreen, setIsAuthenticated } = useAppContext();
   useEffect(() => {
     const timer = setTimeout(() => {
-      // For a real app, you might check for an existing session here
-      setCurrentScreen(Screen.HOME_SCREEN);
-    }, 3000); 
+      supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session) setIsAuthenticated(true);
+          setCurrentScreen(Screen.HOME_SCREEN);
+      });
+    }, 2500); 
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
   return (
     <div className="flex flex-col items-center justify-center h-full bg-white overflow-hidden">
-        <div className="w-24 h-24 mb-4">
-             <MarketPaLineLogo className="w-full h-full splash-logo" stroke="#009639" />
+        <div className="w-24 h-24 mb-4 text-primary">
+             <NyumbaNowLogo className="w-full h-full splash-logo" />
         </div>
-      <h1 id="splash-title" className="text-4xl font-bold font-heading text-text-primary splash-text">MarketPaLine</h1>
-      <p id="splash-subtitle" className="text-lg text-text-secondary mt-2 splash-text">Buy, sell, and rent anything in Malawi.</p>
+      <h1 className="text-4xl font-bold font-heading text-primary splash-text">NyumbaNow</h1>
+      <p className="text-lg text-text-secondary mt-2 splash-text">Malawi's House Rental Market</p>
     </div>
   );
 };
 
 export const LoginScreen: React.FC = () => {
-    const { setCurrentScreen, setIsAuthenticated, userRole } = useAppContext();
-    const handleLogin = () => {
-        setIsAuthenticated(true);
-        // If user already selected a role, go to their home screen, otherwise let them choose.
-        if (userRole === UserRole.NONE) {
-            setCurrentScreen(Screen.ROLE_SELECTION);
-        } else if (userRole === UserRole.BUYER) {
-            setCurrentScreen(Screen.HOME_SCREEN);
-        } else {
-            setCurrentScreen(Screen.DASHBOARD);
-        }
+    const { setCurrentScreen, setIsAuthenticated } = useAppContext();
+    const [email, setEmail] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [message, setMessage] = useState('');
+    const handleLogin = async () => {
+        if (!email) { setMessage("Email is required."); return; }
+        setIsLoading(true); setMessage('');
+        try {
+            const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
+            if (error) setMessage(error.message);
+            else setMessage('Link sent! Check your inbox.');
+        } catch (error) { setMessage('Login failed.'); }
+        finally { setIsLoading(false); }
     };
     return (
         <div className="p-8 flex flex-col justify-center h-full bg-secondary">
-            <h1 className="font-heading text-2xl font-bold mb-2">Welcome Back</h1>
-            <p className="text-text-secondary mb-8">Enter your phone number to continue.</p>
+            <h1 className="font-heading text-3xl font-bold mb-2">Welcome</h1>
+            <p className="text-text-secondary mb-8">Login to save favorites and chat with owners.</p>
             <div className="mb-4">
-                <label htmlFor="phone" className="block text-sm font-medium text-text-secondary mb-1">Phone Number</label>
-                <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <PhoneIcon className="h-5 w-5 text-gray-400" />
-                    </div>
-                    <input 
-                        type="tel" 
-                        id="phone" 
-                        placeholder="+265 991 234 567" 
-                        className="w-full pl-10 pr-4 py-3 rounded-lg border border-border-soft focus:ring-primary focus:border-primary"
-                    />
-                </div>
+                <label className="block text-xs font-bold text-text-secondary uppercase mb-1">Email</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@email.mw" className="w-full px-4 py-3 rounded-xl border border-border-soft focus:ring-primary focus:border-primary outline-none" />
             </div>
-            <Button onClick={handleLogin}>Continue</Button>
-
-            <div className="my-6 flex items-center">
-                <div className="flex-grow border-t border-border-soft"></div>
-                <span className="flex-shrink mx-4 text-text-secondary text-sm">OR</span>
-                <div className="flex-grow border-t border-border-soft"></div>
-            </div>
-
-            <div className="space-y-3">
-                 <button onClick={handleLogin} className="w-full py-3 rounded-lg font-heading font-semibold transition-colors duration-300 text-center bg-white border border-border-soft text-text-primary hover:bg-gray-50 flex items-center justify-center">
-                    <GoogleIcon className="w-5 h-5 mr-3" />
-                    <span className="font-semibold">Continue with Google</span>
-                </button>
-                <button onClick={handleLogin} className="w-full py-3 rounded-lg font-heading font-semibold transition-colors duration-300 text-center bg-[#1877F2] text-white border border-[#1877F2] hover:bg-[#166fe5] flex items-center justify-center">
-                    <FacebookIcon className="w-5 h-5 mr-3" />
-                    <span className="font-semibold">Continue with Facebook</span>
-                </button>
-            </div>
-
-            <p className="text-center text-sm text-text-secondary mt-6">
-                Don't have an account? <a href="#" onClick={(e) => { e.preventDefault(); handleLogin(); }} className="font-semibold text-primary">Register</a>
-            </p>
+            {message && <div className="mb-4 text-sm text-primary font-medium">{message}</div>}
+            <Button onClick={handleLogin} disabled={isLoading}>{isLoading ? 'Loading...' : 'Send Magic Link'}</Button>
+            <button onClick={() => { setIsAuthenticated(true); setCurrentScreen(Screen.HOME_SCREEN); }} className="mt-8 text-xs text-gray-400 underline w-full text-center">(Demo Mode)</button>
         </div>
     );
 };
 
 export const RoleSelectionScreen: React.FC = () => {
-    const { setUserRole, setCurrentScreen, postLoginRedirect, setPostLoginRedirect } = useAppContext();
+    const { setUserRole, setCurrentScreen } = useAppContext();
+
     const selectRole = (role: UserRole) => {
         setUserRole(role);
-
-        let destination: Screen = Screen.HOME_SCREEN; // A safe default
-        switch (role) {
-            case UserRole.BUYER:
-                destination = postLoginRedirect || Screen.HOME_SCREEN;
-                break;
-            case UserRole.SELLER:
-                destination = Screen.DASHBOARD;
-                break;
-        }
-
-        setCurrentScreen(destination);
-        
-        if (postLoginRedirect) {
-            setPostLoginRedirect(null);
+        if (role === UserRole.BUYER) {
+            setCurrentScreen(Screen.HOME_SCREEN);
+        } else {
+            setCurrentScreen(Screen.DASHBOARD);
         }
     };
 
     return (
-        <div className="p-8 flex flex-col justify-center h-full bg-secondary">
-            <h1 className="font-heading text-2xl font-bold text-center mb-2">Choose Your Role</h1>
-            <p className="text-text-secondary text-center mb-8">How will you be using MarketPaLine?</p>
+        <div className="flex flex-col h-full bg-secondary p-8 justify-center">
+            <div className="text-center mb-12">
+                <NyumbaNowLogo className="w-16 h-16 text-primary mx-auto mb-4" />
+                <h1 className="text-3xl font-bold font-heading text-text-primary">Continue as...</h1>
+                <p className="text-text-secondary mt-2">Choose how you want to use NyumbaNow</p>
+            </div>
+            
             <div className="space-y-4">
-                <Button onClick={() => selectRole(UserRole.BUYER)}>I want to Buy or Rent</Button>
-                <Button onClick={() => selectRole(UserRole.SELLER)} variant="outline">I want to Sell or Hire Out</Button>
-            </div>
-        </div>
-    );
-};
-
-const MOCK_COORDINATES = [
-    { top: '20%', left: '30%' },
-    { top: '50%', left: '70%' },
-    { top: '75%', left: '25%' },
-    { top: '35%', left: '55%' },
-];
-
-const MapView: React.FC = () => {
-    const { setSelectedListing, setCurrentScreen } = useAppContext();
-    const [activeListing, setActiveListing] = useState<Listing | null>(null);
-
-    const handlePinClick = (listing: Listing) => {
-        setActiveListing(listing);
-    };
-    
-    const handleCardClick = (listing: Listing) => {
-        setSelectedListing(listing);
-        setCurrentScreen(Screen.LISTING_DETAILS);
-    }
-
-    return (
-        <div className="flex-grow h-full relative">
-            <div className="absolute inset-0 bg-gray-200">
-                <img src="https://static.vecteezy.com/system/resources/thumbnails/003/399/485/small/map-of-the-city-with-streets-and-districts-vector.jpg" className="w-full h-full object-cover opacity-50" alt="City Map"/>
-            </div>
-            
-            {MOCK_LISTINGS.map((listing, index) => (
                 <button 
-                    key={listing.id} 
-                    className="absolute transform -translate-x-1/2 -translate-y-1/2"
-                    style={MOCK_COORDINATES[index % MOCK_COORDINATES.length]}
-                    onClick={() => handlePinClick(listing)}
-                    aria-label={`View details for ${listing.title}`}
+                    onClick={() => selectRole(UserRole.BUYER)}
+                    className="w-full bg-white p-6 rounded-3xl shadow-sm flex flex-col items-center border-2 border-transparent hover:border-primary transition-all text-center"
                 >
-                    <div className={`p-1 rounded-full shadow-lg transition-transform ${activeListing?.id === listing.id ? 'bg-primary scale-125' : 'bg-white'}`}>
-                        <MapPinIcon className={`w-5 h-5 ${activeListing?.id === listing.id ? 'text-white' : 'text-primary'}`} />
+                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-3 text-primary">
+                        <HouseIcon />
                     </div>
+                    <h3 className="font-bold text-xl">I want to Rent</h3>
+                    <p className="text-sm text-text-secondary">Find your next home in Malawi</p>
                 </button>
-            ))}
-            
-            {activeListing && (
-                <div className="absolute bottom-4 left-4 right-4 z-10 animate-fade-in-up">
-                   <RecommendedListingCard listing={activeListing} onClick={() => handleCardClick(activeListing)} />
-                </div>
-            )}
+
+                <button 
+                    onClick={() => selectRole(UserRole.SELLER)}
+                    className="w-full bg-white p-6 rounded-3xl shadow-sm flex flex-col items-center border-2 border-transparent hover:border-primary transition-all text-center"
+                >
+                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-3 text-primary">
+                        <BriefcaseIcon />
+                    </div>
+                    <h3 className="font-bold text-xl">I want to List</h3>
+                    <p className="text-sm text-text-secondary">Advertise your property or agency</p>
+                </button>
+            </div>
         </div>
     );
 };
 
 export const HomeScreen: React.FC = () => {
     const { setCurrentScreen, setSelectedListing, isAuthenticated } = useAppContext();
-    const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
-    const [listings, setListings] = useState(MOCK_LISTINGS);
-    const [isRefreshing, setIsRefreshing] = useState(false);
-    const [pullPosition, setPullPosition] = useState(0);
-    const scrollRef = useRef<HTMLDivElement>(null);
-    const pullStartRef = useRef<number | null>(null);
+    const { listings, loading: isLoading } = useListings();
+    const [search, setSearch] = useState('');
+    const [isMapMode, setIsMapMode] = useState(false);
+    const [showFilters, setShowFilters] = useState(false);
 
-    type SortOption = 'recent' | 'price-asc' | 'price-desc';
-    const [sortOption, setSortOption] = useState<SortOption>('recent');
-    const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
-    const sortMenuRef = useRef<HTMLDivElement>(null);
-
-    const [selectedCategory, setSelectedCategory] = useState<ListingCategory | 'all'>('all');
-    
-    const [searchQuery, setSearchQuery] = useState('');
-
-    const PULL_THRESHOLD = 80;
-    const PULL_RESISTANCE = 0.5;
-    
-    const categories = [
-        { name: 'Houses', icon: HouseIcon, category: ListingCategory.HOUSE_RENTAL },
-        { name: 'For Sale', icon: TagIcon, category: ListingCategory.HOUSE_SALE }, // Simplified for UI
-        { name: 'Cars', icon: CarIcon, category: ListingCategory.CAR_HIRE },
-        { name: 'Venues', icon: CalendarDaysIcon, category: ListingCategory.EVENT_VENUE_HIRE },
-        { name: 'Equipment', icon: BriefcaseIcon, category: ListingCategory.EQUIPMENT_HIRE },
-    ];
-
-    useEffect(() => {
-        let processedListings = [...MOCK_LISTINGS];
-
-        // Filter by category
-        if (selectedCategory !== 'all') {
-            if (selectedCategory === ListingCategory.HOUSE_SALE) {
-                 processedListings = processedListings.filter(p => [ListingCategory.HOUSE_SALE, ListingCategory.LAND_SALE, ListingCategory.CAR_SALE, ListingCategory.ELECTRONICS_SALE].includes(p.category));
-            } else if (selectedCategory === ListingCategory.CAR_HIRE) {
-                 processedListings = processedListings.filter(p => [ListingCategory.CAR_HIRE, ListingCategory.CAR_SALE].includes(p.category));
-            }
-            else {
-                processedListings = processedListings.filter(p => p.category === selectedCategory);
-            }
-        }
-
-        // Filter by search query
-        if (searchQuery) {
-            const lowercasedQuery = searchQuery.toLowerCase();
-            processedListings = processedListings.filter(p => 
-                p.title.toLowerCase().includes(lowercasedQuery) ||
-                p.location.toLowerCase().includes(lowercasedQuery) ||
-                p.price.toString().includes(lowercasedQuery)
-            );
-        }
-
-        // Sort the results
-        switch (sortOption) {
-            case 'price-asc':
-                processedListings.sort((a, b) => a.price - b.price);
-                break;
-            case 'price-desc':
-                processedListings.sort((a, b) => b.price - a.price);
-                break;
-            case 'recent':
-            default:
-                break;
-        }
-        setListings(processedListings);
-    }, [sortOption, selectedCategory, searchQuery]);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (sortMenuRef.current && !sortMenuRef.current.contains(event.target as Node)) {
-                setIsSortMenuOpen(false);
-            }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
-    }, [sortMenuRef]);
-
-
-    const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-        if (scrollRef.current && scrollRef.current.scrollTop === 0) {
-            pullStartRef.current = e.touches[0].clientY;
-        } else {
-            pullStartRef.current = null;
-        }
-    };
-
-    const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-        if (pullStartRef.current === null || isRefreshing) return;
-
-        const touchY = e.touches[0].clientY;
-        const pullDelta = touchY - pullStartRef.current;
-
-        if (pullDelta > 0) {
-            e.preventDefault();
-            const newPullPosition = Math.min(pullDelta * PULL_RESISTANCE, PULL_THRESHOLD + 40);
-            setPullPosition(newPullPosition);
-        }
-    };
-
-    const handleTouchEnd = () => {
-        if (pullStartRef.current === null || isRefreshing) return;
-        pullStartRef.current = null;
-
-        if (pullPosition >= PULL_THRESHOLD) {
-            setIsRefreshing(true);
-            setPullPosition(60);
-
-            setTimeout(() => {
-                const shuffled = [...listings].sort(() => Math.random() - 0.5);
-                setListings(shuffled);
-                setIsRefreshing(false);
-                setPullPosition(0);
-            }, 1500);
-        } else {
-            setPullPosition(0);
-        }
-    };
-
-    const handleListingClick = (listing: Listing) => {
-        setSelectedListing(listing);
-        setCurrentScreen(Screen.LISTING_DETAILS);
-    };
-    
-    const sortOptions: { label: string, value: SortOption }[] = [
-        { label: 'Recently Added', value: 'recent' },
-        { label: 'Price: Low to High', value: 'price-asc' },
-        { label: 'Price: High to Low', value: 'price-desc' },
-    ];
-
-    const recommendedListings = listings.slice(0, 5);
+    const filtered = listings.filter(l => 
+        l.title.toLowerCase().includes(search.toLowerCase()) || 
+        l.location.toLowerCase().includes(search.toLowerCase())
+    );
 
     return (
-        <div className="bg-secondary min-h-full flex flex-col">
-            <div className="p-4 sticky top-0 bg-secondary/80 backdrop-blur-sm z-10">
-                <div className="flex items-center gap-2">
-                    <div className="relative flex-grow">
-                        <input 
-                            type="text" 
-                            placeholder="Search for anything..." 
-                            className="w-full pl-10 pr-4 py-2 rounded-full border border-border-soft" 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            autoComplete="off"
-                        />
-                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                    </div>
-                     <button 
-                        onClick={() => setViewMode(viewMode === 'list' ? 'map' : 'list')} 
-                        className="p-2 bg-white rounded-full shadow border border-border-soft hover:bg-gray-100 transition-colors flex-shrink-0"
-                        aria-label={viewMode === 'list' ? 'Switch to map view' : 'Switch to list view'}
-                    >
-                        {viewMode === 'list' ? <MapIcon className="w-5 h-5 text-text-primary" /> : <ListIcon className="w-5 h-5 text-text-primary" />}
+        <div className="bg-secondary min-h-full flex flex-col pb-20">
+            <div className="p-4 pt-6 bg-white border-b border-border-soft sticky top-0 z-10 shadow-sm">
+                <div className="flex items-center gap-3 mb-4">
+                    <NyumbaNowLogo className="text-primary w-8 h-8" />
+                    <h1 className="font-heading text-xl font-bold tracking-tight">NyumbaNow</h1>
+                    <div className="flex-grow"></div>
+                    <button onClick={() => setIsMapMode(!isMapMode)} className="flex items-center gap-2 bg-secondary px-3 py-1.5 rounded-full text-xs font-bold text-text-primary border border-border-soft">
+                        {isMapMode ? <ListIcon className="w-4 h-4" /> : <MapIcon className="w-4 h-4" />}
+                        {isMapMode ? 'LIST' : 'MAP'}
                     </button>
-                    {isAuthenticated ? (
-                        <button
-                            onClick={() => setCurrentScreen(Screen.NOTIFICATIONS)}
-                            className="p-2 bg-white rounded-full shadow border border-border-soft hover:bg-gray-100 transition-colors flex-shrink-0"
-                            aria-label="View notifications"
-                        >
-                            <BellIcon className="w-5 h-5 text-text-primary" />
-                        </button>
-                    ) : (
-                        <button 
-                            onClick={() => setCurrentScreen(Screen.LOGIN)}
-                            className="px-4 py-2 bg-primary text-white rounded-full text-sm font-semibold hover:bg-green-700 transition-colors flex-shrink-0"
-                        >
-                            Login
+                    {isAuthenticated && (
+                        <button onClick={() => setCurrentScreen(Screen.NOTIFICATIONS)} className="p-2 bg-secondary rounded-full relative">
+                            <BellIcon className="w-5 h-5" />
+                            <div className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></div>
                         </button>
                     )}
                 </div>
-                <div className="mt-4">
-                    <div className="flex space-x-2 overflow-x-auto scrollbar-hide -mx-4 px-4">
-                        <button 
-                            onClick={() => setSelectedCategory('all')} 
-                            className={`flex-shrink-0 px-3 py-2 rounded-full text-sm font-semibold transition-colors ${selectedCategory === 'all' ? 'bg-primary text-white' : 'bg-white border border-border-soft text-text-secondary'}`}
-                        >
-                           All
-                        </button>
-                        {categories.map(({name, icon: Icon, category}) => (
-                             <button 
-                                key={name}
-                                onClick={() => setSelectedCategory(category)} 
-                                className={`flex items-center flex-shrink-0 px-3 py-2 rounded-full text-sm font-semibold transition-colors ${selectedCategory === category ? 'bg-primary text-white' : 'bg-white border border-border-soft text-text-secondary'}`}
-                            >
-                               <Icon className="w-4 h-4 mr-1.5" />
-                               {name}
-                            </button>
-                        ))}
+                <div className="flex gap-2">
+                    <div className="relative flex-grow">
+                        <input value={search} onChange={e => setSearch(e.target.value)} type="text" placeholder="Search Areas (e.g. Area 10, Nyambadwe)" className="w-full px-4 py-3 rounded-xl bg-secondary border-none outline-none text-sm placeholder:text-gray-400 font-medium" />
                     </div>
+                    <button onClick={() => setShowFilters(true)} className="p-3 bg-primary text-white rounded-xl shadow-lg shadow-primary/20">
+                        <FilterIcon className="w-5 h-5" />
+                    </button>
                 </div>
-
             </div>
             
-            {viewMode === 'list' ? (
-                <div
-                    ref={scrollRef}
-                    className="flex-grow overflow-y-auto scrollbar-hide"
-                    onTouchStart={handleTouchStart}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={handleTouchEnd}
-                >
-                    <div
-                        className={`transition-transform duration-300 relative ${pullStartRef.current !== null ? '!duration-0' : ''}`}
-                        style={{ transform: `translateY(${pullPosition}px)` }}
-                    >
-                        <div className="absolute top-0 left-0 right-0 h-[60px] flex items-center justify-center -translate-y-full pointer-events-none">
-                            {isRefreshing ? (
-                                <LoaderIcon className="w-6 h-6 text-primary animate-spin" />
-                            ) : (
-                                <ArrowDownIcon 
-                                    className="w-6 h-6 text-text-secondary transition-transform duration-200"
-                                    style={{ 
-                                        opacity: Math.min(pullPosition / PULL_THRESHOLD, 1),
-                                        transform: `rotate(${pullPosition >= PULL_THRESHOLD ? '180deg' : '0deg'})` 
-                                    }}
-                                />
-                            )}
+            <div className="p-4 overflow-y-auto scrollbar-hide">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="font-heading font-bold text-lg">Featured Rentals</h2>
+                    <span className="text-xs font-bold text-text-secondary">{filtered.length} Properties</span>
+                </div>
+                
+                {isLoading && filtered.length === 0 ? (
+                    <div className="space-y-4">
+                        <ListingSkeleton />
+                        <ListingSkeleton />
+                        <ListingSkeleton />
+                    </div>
+                ) : isMapMode ? (
+                    <div className="bg-white rounded-3xl h-96 flex flex-col items-center justify-center border border-dashed border-gray-300 relative overflow-hidden">
+                        <div className="absolute inset-0 bg-gray-50 opacity-50 bg-[url('https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/Blank_Map_of_Malawi.svg/800px-Blank_Map_of_Malawi.svg.png')] bg-center bg-no-repeat bg-contain"></div>
+                        <MapIcon className="w-12 h-12 text-gray-200 mb-4" />
+                        <h3 className="font-bold relative z-10">Map Discovery Mode</h3>
+                        <p className="text-xs text-text-secondary text-center px-10 relative z-10">Zoom into Lilongwe, Blantyre or Mzuzu to see active property pins.</p>
+                        <button className="mt-6 bg-primary text-white px-6 py-2 rounded-full font-bold text-xs relative z-10 shadow-lg" onClick={() => setIsMapMode(false)}>BACK TO LIST</button>
+                    </div>
+                ) : filtered.length > 0 ? (
+                    filtered.map(l => <ListingCard key={l.id} listing={l} onClick={() => { setSelectedListing(l); setCurrentScreen(Screen.LISTING_DETAILS); }} />)
+                ) : (
+                    <div className="text-center py-20 bg-white rounded-3xl border border-border-soft px-8">
+                        <HouseIcon className="w-16 h-16 text-gray-100 mx-auto mb-4" />
+                        <h3 className="font-bold text-lg">No Results Found</h3>
+                        <p className="text-sm text-text-secondary mt-2">Try adjusting your area search or checking different property types.</p>
+                    </div>
+                )}
+            </div>
+
+            {/* Filter Modal Overlay */}
+            {showFilters && (
+                <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-4 backdrop-blur-sm" onClick={() => setShowFilters(false)}>
+                    <div className="bg-white w-full max-w-sm rounded-[32px] p-8 space-y-8 animate-slide-up" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center">
+                            <h3 className="text-2xl font-bold font-heading">Filters</h3>
+                            <button onClick={() => setShowFilters(false)} className="text-text-secondary font-bold text-sm">Clear All</button>
                         </div>
-                        <div className="py-4">
-                            <h2 className="font-heading text-xl font-semibold text-text-primary px-4 mb-3">Recommended for You</h2>
-                            <div className="flex overflow-x-auto space-x-4 px-4 pb-2 scrollbar-hide">
-                                {recommendedListings.map(item => (
-                                    <RecommendedListingCard key={item.id} listing={item} onClick={() => handleListingClick(item)} />
-                                ))}
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">Price Range (MK)</label>
+                            <div className="flex gap-4">
+                                <input type="number" placeholder="Min" className="flex-1 bg-secondary p-3 rounded-xl outline-none font-bold text-sm" />
+                                <input type="number" placeholder="Max" className="flex-1 bg-secondary p-3 rounded-xl outline-none font-bold text-sm" />
                             </div>
                         </div>
-                        <div className="px-4">
-                            <div className="flex justify-between items-center mb-3">
-                                <h2 className="font-heading text-xl font-semibold text-text-primary">All Listings</h2>
-                                 <div className="relative" ref={sortMenuRef}>
-                                    <button 
-                                        onClick={() => setIsSortMenuOpen(!isSortMenuOpen)} 
-                                        className="px-3 py-1 bg-white border border-border-soft rounded-full text-sm text-text-secondary flex items-center flex-shrink-0"
-                                    >
-                                        <SortIcon className="w-4 h-4 mr-1.5" />
-                                        <span>Sort</span>
-                                        <ChevronDownIcon className={`w-4 h-4 ml-1 text-gray-400 transition-transform ${isSortMenuOpen ? 'rotate-180' : ''}`} />
-                                    </button>
-                                    {isSortMenuOpen && (
-                                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl z-20 py-1 border border-border-soft animate-fade-in-up" style={{ animationDuration: '0.2s' }}>
-                                            {sortOptions.map(option => (
-                                                <button
-                                                    key={option.value}
-                                                    onClick={() => {
-                                                        setSortOption(option.value);
-                                                        setIsSortMenuOpen(false);
-                                                    }}
-                                                    className={`w-full text-left px-4 py-2 text-sm ${sortOption === option.value ? 'bg-primary/10 text-primary font-semibold' : 'text-text-primary'} hover:bg-gray-100`}
-                                                >
-                                                    {option.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">Essentials</label>
+                            <div className="grid grid-cols-2 gap-3">
+                                <button className="p-3 border-2 border-primary bg-primary/5 text-primary rounded-2xl font-bold text-xs flex items-center gap-2">
+                                    <SunIcon className="w-4 h-4" /> Backup Power
+                                </button>
+                                <button className="p-3 border-2 border-border-soft text-text-secondary rounded-2xl font-bold text-xs flex items-center gap-2">
+                                    <DropletsIcon className="w-4 h-4" /> Borehole
+                                </button>
+                                <button className="p-3 border-2 border-border-soft text-text-secondary rounded-2xl font-bold text-xs flex items-center gap-2">
+                                    <ShieldCheckIcon className="w-4 h-4" /> Electric Fence
+                                </button>
+                                <button className="p-3 border-2 border-border-soft text-text-secondary rounded-2xl font-bold text-xs flex items-center gap-2">
+                                    <ShieldCheckIcon className="w-4 h-4" /> Verified Agent
+                                </button>
                             </div>
-                            {listings.length > 0 ? (
-                                listings.map(listing => (
-                                    <ListingCard key={listing.id} listing={listing} onClick={() => handleListingClick(listing)} />
-                                ))
-                            ) : (
-                                <div className="text-center py-10">
-                                    <p className="text-text-secondary">No listings found.</p>
-                                    <p className="text-sm text-gray-400">Try adjusting your search or filters.</p>
-                                </div>
-                            )}
                         </div>
+                        <Button onClick={() => setShowFilters(false)}>Apply Filters</Button>
                     </div>
                 </div>
-            ) : (
-                <MapView />
             )}
         </div>
     );
 };
 
-
 export const ListingDetailsScreen: React.FC = () => {
-    const { selectedListing, setSelectedListing, setCurrentScreen, isAuthenticated, setPostLoginRedirect } = useAppContext();
-    const [listingData, setListingData] = useState<Listing | null>(selectedListing);
-    const [currentImageIndex, setCurrentImageIndex] = useState(0);
-    const [isFavorite, setIsFavorite] = useState(false);
-    const [touchStartX, setTouchStartX] = useState<number | null>(null);
-    const [isImageLoading, setIsImageLoading] = useState(true);
-    const [showLoginModal, setShowLoginModal] = useState(false);
-    const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
-
-    // New state for modals
-    const [showScheduleModal, setShowScheduleModal] = useState(false);
-    const [showBookingConfirmationModal, setShowBookingConfirmationModal] = useState(false);
-    const [showInquiryModal, setShowInquiryModal] = useState(false);
-    const [showInquiryConfirmationModal, setShowInquiryConfirmationModal] = useState(false);
-
+    const { selectedListing, setCurrentScreen, isAuthenticated, setActiveChatPartner, setSelectedListing } = useAppContext();
+    const [isFav, setIsFav] = useState(false);
+    const [showBookingModal, setShowBookingModal] = useState(false);
+    const [bookingDate, setBookingDate] = useState('');
+    const [timeSlot, setTimeSlot] = useState<'Morning' | 'Afternoon' | 'Evening'>('Morning');
+    const [bookingLoading, setBookingLoading] = useState(false);
+    const [fullLoading, setFullLoading] = useState(false);
 
     useEffect(() => {
-        if (!listingData) {
-            setCurrentScreen(Screen.HOME_SCREEN);
+        if (isAuthenticated && selectedListing) checkFav();
+        if (selectedListing && (!selectedListing.description || !selectedListing.amenities)) {
+            fetchFullListing();
         }
-    }, [listingData, setCurrentScreen]);
+    }, [selectedListing, isAuthenticated]);
 
-    useEffect(() => {
-        setIsImageLoading(true);
-    }, [currentImageIndex]);
-
-    if (!listingData) {
-        return null; // Or a loading/error state
-    }
-    
-    const handleActionClick = (action: () => void) => {
-        if (isAuthenticated) {
-            action();
-        } else {
-            setShowLoginModal(true);
-        }
-    };
-    
-    const handleShare = async () => {
-        if (!listingData) return;
-
-        const shareData = {
-            title: `Check out this listing on MarketPaLine`,
-            text: `${listingData.title}\nLocation: ${listingData.location}\nPrice: MK ${listingData.price.toLocaleString()}`,
-            url: `https://marketpaline.app/listing/${listingData.id}` // Mock URL
-        };
-
-        if (navigator.share) {
-            try {
-                await navigator.share(shareData);
-            } catch (err) {
-                console.error('Error sharing listing:', err);
+    const fetchFullListing = async () => {
+        if (!selectedListing) return;
+        setFullLoading(true);
+        try {
+            const { data } = await supabase.from('listings').select('*').eq('id', selectedListing.id).single();
+            if (data) {
+                setSelectedListing({
+                    ...selectedListing,
+                    description: data.description,
+                    amenities: data.amenities || []
+                });
             }
-        } else {
-            // Fallback for browsers that don't support the Web Share API
-            alert('Sharing is not supported on your browser. You can manually copy the link: ' + shareData.url);
-        }
-    };
-    
-    const handleReviewSubmit = (rating: number, comment: string) => {
-        const newReview: Review = {
-            id: Date.now(),
-            authorName: 'John Doe', // Mock user name
-            rating,
-            comment,
-            timestamp: 'Just now',
-        };
-
-        const updatedReviews = [newReview, ...(listingData.reviews || [])];
-        const updatedListing = { ...listingData, reviews: updatedReviews };
-        
-        setListingData(updatedListing);
-        setSelectedListing(updatedListing); // Also update context if needed elsewhere
-        setIsReviewModalOpen(false);
+        } catch (e) {} finally { setFullLoading(false); }
     };
 
-    const handleScheduleSubmit = (date: string, time: string) => {
-        console.log(`Viewing request for ${date} at ${time}`);
-        setShowScheduleModal(false);
-        setShowBookingConfirmationModal(true);
+    const checkFav = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase.from('favorites').select('*').eq('user_id', user.id).eq('listing_id', selectedListing?.id).single();
+        if (data) setIsFav(true);
     };
 
-    const handleInquirySubmit = (message: string) => {
-        console.log("Inquiry sent:", message);
-        setShowInquiryModal(false);
-        setShowInquiryConfirmationModal(true);
-    };
+    const toggleFav = async () => {
+        if (!isAuthenticated) { setCurrentScreen(Screen.LOGIN); return; }
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
+        // Optimistic UI
+        const wasFav = isFav;
+        setIsFav(!isFav);
 
-    const images = listingData.images.length > 0 ? listingData.images : [listingData.imageUrl];
-
-    const nextImage = () => {
-        setCurrentImageIndex((prevIndex) => (prevIndex + 1) % images.length);
-    };
-
-    const prevImage = () => {
-        setCurrentImageIndex((prevIndex) => (prevIndex - 1 + images.length) % images.length);
-    };
-
-    const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-        setTouchStartX(e.targetTouches[0].clientX);
-    };
-
-    const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
-        if (touchStartX === null) return;
-        
-        const touchEndX = e.changedTouches[0].clientX;
-        const diff = touchStartX - touchEndX;
-
-        if (Math.abs(diff) > 50) {
-            if (diff > 0) {
-                nextImage();
+        try {
+            if (wasFav) {
+                await supabase.from('favorites').delete().eq('user_id', user.id).eq('listing_id', selectedListing?.id);
             } else {
-                prevImage();
+                await supabase.from('favorites').insert({ user_id: user.id, listing_id: selectedListing?.id });
             }
+        } catch (e) {
+            setIsFav(wasFav); // Revert on error
         }
-        setTouchStartX(null);
     };
 
-    const BookingConfirmationModal = ({ onClose }: { onClose: () => void }) => (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 m-4 max-w-sm w-full text-center animate-fade-in-up">
-                <h2 className="font-heading text-xl font-bold mb-2">Request Sent</h2>
-                <p className="text-text-secondary mb-6">The seller has been notified. They will contact you shortly to confirm.</p>
-                <Button onClick={onClose}>Got it</Button>
-            </div>
-        </div>
-    );
-
-    const InquiryConfirmationModal = ({ onClose }: { onClose: () => void }) => (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 m-4 max-w-sm w-full text-center animate-fade-in-up">
-                <h2 className="font-heading text-xl font-bold mb-2">Inquiry Sent</h2>
-                <p className="text-text-secondary mb-6">Your message has been sent. The seller will respond to you soon.</p>
-                <Button onClick={onClose}>Great!</Button>
-            </div>
-        </div>
-    );
-    
-    const LoginRequiredModal = ({ onClose }: { onClose: () => void }) => (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 m-4 max-w-sm w-full text-center animate-fade-in-up">
-                <h2 className="font-heading text-xl font-bold mb-2">Login Required</h2>
-                <p className="text-text-secondary mb-6">Please log in or register to contact the seller.</p>
-                <Button onClick={() => {
-                    onClose();
-                    setPostLoginRedirect(Screen.LISTING_DETAILS);
-                    setCurrentScreen(Screen.LOGIN);
-                }} className="mb-2">Login / Register</Button>
-                <button onClick={onClose} className="text-sm text-text-secondary">Maybe Later</button>
-            </div>
-        </div>
-    );
-
-    const ScheduleViewingModal = ({ onClose, onSubmit }: { onClose: () => void, onSubmit: (date: string, time: string) => void }) => {
-        const [date, setDate] = useState('');
-        const [time, setTime] = useState('');
-    
-        const handleSubmit = () => {
-            if (date && time) {
-                onSubmit(date, time);
-            }
-        };
-    
-        return (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 m-4 max-w-sm w-full animate-fade-in-up">
-                    <h2 className="font-heading text-xl font-bold mb-4">Schedule a Viewing</h2>
-                    <InputField label="Preferred Date" id="viewingDate" type="date" value={date} onChange={(e) => setDate(e.target.value)} min={new Date().toISOString().split("T")[0]}/>
-                    <InputField label="Preferred Time" id="viewingTime" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-                    <div className="flex gap-2 mt-4">
-                        <Button onClick={onClose} variant="outline" className="w-1/2">Cancel</Button>
-                        <Button onClick={handleSubmit} className="w-1/2" disabled={!date || !time}>Send Request</Button>
-                    </div>
-                </div>
-            </div>
-        );
-    };
-    
-    const InquiryModal = ({ listing, onClose, onSubmit }: { listing: Listing, onClose: () => void, onSubmit: (message: string) => void }) => {
-        const [message, setMessage] = useState(
-          `Hi ${listing.sellerName}, I'm interested in "${listing.title}" at ${listing.location}. I'd like to know more details. Thank you!`
-        );
-    
-        const handleSubmit = () => {
-            if (message.trim()) {
-                onSubmit(message);
-            }
-        };
-    
-        return (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 m-4 max-w-sm w-full animate-fade-in-up">
-                    <h2 className="font-heading text-xl font-bold mb-4">Send an Inquiry</h2>
-                    <TextAreaField
-                        label={`Message to ${listing.sellerName}`}
-                        id="inquiryMessage"
-                        value={message}
-                        onChange={(e) => setMessage(e.target.value)}
-                    />
-                    <div className="flex gap-2 mt-4">
-                        <Button onClick={onClose} variant="outline" className="w-1/2">Cancel</Button>
-                        <Button onClick={handleSubmit} className="w-1/2" disabled={!message.trim()}>Send Inquiry</Button>
-                    </div>
-                </div>
-            </div>
-        );
+    const handleBooking = async () => {
+        if (!isAuthenticated) { setCurrentScreen(Screen.LOGIN); return; }
+        if (!bookingDate) { alert('Please select a date.'); return; }
+        setBookingLoading(true);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user || !selectedListing) return;
+            
+            const { error } = await supabase.from('viewings').insert({
+                listing_id: selectedListing.id,
+                tenant_id: user.id,
+                landlord_id: selectedListing.sellerId,
+                viewing_date: bookingDate,
+                time_slot: timeSlot,
+                status: 'Pending'
+            });
+            
+            if (error) throw error;
+            alert('Viewing request sent! The agent will confirm shortly.');
+            setShowBookingModal(false);
+            setCurrentScreen(Screen.BOOKINGS);
+        } catch (e: any) {
+            alert('Failed to request viewing: ' + e.message);
+        } finally {
+            setBookingLoading(false);
+        }
     };
 
-    const LeaveReviewModal = ({ onClose, onSubmit }: { onClose: () => void, onSubmit: (rating: number, comment: string) => void }) => {
-        const [rating, setRating] = useState(0);
-        const [comment, setComment] = useState('');
-        const [hoverRating, setHoverRating] = useState(0);
-
-        const handleSubmit = () => {
-            if (rating > 0 && comment.trim().length > 0) {
-                onSubmit(rating, comment);
-            }
-        };
-
-        return (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 m-4 max-w-sm w-full animate-fade-in-up">
-                    <h2 className="font-heading text-xl font-bold mb-4">Leave a Review</h2>
-                    <div className="mb-4">
-                        <p className="block text-sm font-medium text-text-secondary mb-2">Your Rating</p>
-                        <div className="flex items-center space-x-1">
-                            {[...Array(5)].map((_, index) => {
-                                const starValue = index + 1;
-                                return (
-                                    <button 
-                                        key={starValue} 
-                                        onClick={() => setRating(starValue)}
-                                        onMouseEnter={() => setHoverRating(starValue)}
-                                        onMouseLeave={() => setHoverRating(0)}
-                                    >
-                                        <StarIcon className={`w-8 h-8 transition-colors ${(hoverRating || rating) >= starValue ? 'text-yellow-400 fill-current' : 'text-gray-300'}`} />
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-                    <TextAreaField label="Your Comment" id="reviewComment" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Share your experience..." />
-                    <div className="flex gap-2 mt-4">
-                        <Button onClick={onClose} variant="outline" className="w-1/2">Cancel</Button>
-                        <Button onClick={handleSubmit} className="w-1/2" disabled={rating === 0 || !comment.trim()}>Submit</Button>
-                    </div>
-                </div>
-            </div>
-        );
+    const startChat = () => {
+        if (!isAuthenticated) { setCurrentScreen(Screen.LOGIN); return; }
+        if (selectedListing) {
+            setActiveChatPartner({ id: selectedListing.sellerId, name: selectedListing.sellerName });
+            setCurrentScreen(Screen.CHAT_ROOM);
+        }
     };
 
-
-    const statusStyles: { [key: string]: string } = {
-        Available: 'bg-green-100 text-green-800',
-        Rented: 'bg-red-100 text-red-800',
-        Pending: 'bg-yellow-100 text-yellow-800',
-        'Under Maintenance': 'bg-blue-100 text-blue-800',
-        Sold: 'bg-gray-100 text-gray-800',
-    };
-    
-    const reviews = listingData.reviews || [];
-    const averageRating = reviews.length > 0 ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length : 0;
-    const priceSuffix = listingData.priceType === 'per month' ? '/month' : listingData.priceType === 'per day' ? '/day' : '';
-    const isViewable = [ListingCategory.HOUSE_RENTAL, ListingCategory.BEDROOM_RENTAL, ListingCategory.EVENT_VENUE_HIRE].includes(listingData.category);
-
-    // FIX: Properly type the AmenityItem component as a React.FC to allow for the `key` prop.
-    interface AmenityItemProps {
-        icon: React.FC<React.SVGProps<SVGSVGElement>>;
-        label: string;
-    }
-    const AmenityItem: React.FC<AmenityItemProps> = ({ icon: Icon, label }) => (
-        <div className="flex flex-col items-center">
-            <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-2">
-                <Icon className="w-6 h-6 text-primary" />
-            </div>
-            <span className="text-xs text-text-secondary">{label}</span>
-        </div>
-    );
-    
-    const amenities = [
-        { name: 'Wi-Fi', icon: WifiIcon },
-        { name: 'Parking', icon: CarIcon },
-        { name: '24/7 Security', icon: ShieldIcon },
-        { name: 'Electricity', icon: ZapIcon },
-        { name: 'Running Water', icon: DropletIcon },
-    ];
-    const showAmenities = [ListingCategory.HOUSE_RENTAL, ListingCategory.HOUSE_SALE, ListingCategory.EVENT_VENUE_HIRE].includes(listingData.category);
-
+    if (!selectedListing) return null;
 
     return (
-        <div className="bg-secondary min-h-full">
-            <div 
-                className="relative w-full h-64 bg-gray-300"
-                onTouchStart={handleTouchStart}
-                onTouchEnd={handleTouchEnd}
-            >
-                {isImageLoading && (
-                    <div className="absolute inset-0 bg-gray-300 flex items-center justify-center">
-                        <LoaderIcon className="w-12 h-12 text-primary animate-spin" />
-                    </div>
-                )}
-                <img 
-                    src={images[currentImageIndex]} 
-                    alt={`${listingData.title} ${currentImageIndex + 1}`} 
-                    className={`w-full h-full object-cover select-none transition-opacity duration-300 ${isImageLoading ? 'opacity-0' : 'opacity-100'}`}
-                    onLoad={() => setIsImageLoading(false)}
-                    aria-live="polite"
-                />
-                
-                <button onClick={() => setCurrentScreen(Screen.HOME_SCREEN)} className="absolute top-4 left-4 bg-black/40 p-2 rounded-full text-white z-10" aria-label="Back to home">
+        <div className="flex flex-col h-full bg-white pb-24">
+            <div className="relative h-96">
+                <img src={selectedListing.imageUrl} className="w-full h-full object-cover" />
+                <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-black/40 to-transparent"></div>
+                <button onClick={() => setCurrentScreen(Screen.HOME_SCREEN)} className="absolute top-6 left-6 p-3 bg-white/20 backdrop-blur-md text-white rounded-full transition-transform active:scale-90">
                     <ChevronLeftIcon className="w-6 h-6" />
                 </button>
-                
-                <div className="absolute top-4 right-4 flex gap-2 z-10">
-                    <button onClick={handleShare} className="bg-black/40 p-2 rounded-full text-white" aria-label="Share listing">
-                        <ShareIcon className="w-6 h-6" />
-                    </button>
-                    <button onClick={() => handleActionClick(() => setIsFavorite(!isFavorite))} className="bg-black/40 p-2 rounded-full text-white" aria-label="Toggle favorite">
-                        <HeartIcon className={`w-6 h-6 transition-colors ${isFavorite ? 'fill-red-500 stroke-red-500' : ''}`} />
-                    </button>
-                </div>
-
-                {images.length > 1 && (
-                    <>
-                        <button onClick={prevImage} className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 p-1 rounded-full text-white z-10" aria-label="Previous image">
-                            <ChevronLeftIcon className="w-5 h-5" />
-                        </button>
-                        <button onClick={nextImage} className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 p-1 rounded-full text-white z-10" aria-label="Next image">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="m9 18 6-6-6-6"/></svg>
-                        </button>
-                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex space-x-2 z-10" role="tablist" aria-label="Image gallery controls">
-                            {images.map((_, index) => (
-                                <button key={index} onClick={() => setCurrentImageIndex(index)} className={`w-2 h-2 rounded-full ${index === currentImageIndex ? 'bg-white' : 'bg-white/50'}`} aria-selected={index === currentImageIndex} role="tab"></button>
-                            ))}
-                        </div>
-                    </>
-                )}
+                <button onClick={toggleFav} className="absolute top-6 right-6 p-3 bg-white text-primary rounded-full shadow-xl shadow-primary/20 transition-transform active:scale-90">
+                    <HeartIcon className={isFav ? 'fill-primary text-primary' : ''} />
+                </button>
             </div>
-
-            <div className="p-4 pb-40">
-                <div className="flex justify-between items-start">
-                    <div className="pr-2">
-                        <h1 className="font-heading text-2xl font-bold text-text-primary">{listingData.title}</h1>
-                         {reviews.length > 0 && (
-                            <div className="flex items-center gap-2 mt-1">
-                                <StarRating rating={averageRating} />
-                                <span className="text-sm text-text-secondary">({reviews.length} review{reviews.length > 1 ? 's' : ''})</span>
-                            </div>
-                        )}
+            <div className="px-6 -mt-8 bg-white rounded-t-[40px] relative z-10 pt-10">
+                <div className="flex justify-between items-start mb-2">
+                    <h1 className="text-3xl font-bold font-heading text-text-primary leading-tight">{selectedListing.title}</h1>
+                    <div className="text-right">
+                        <span className="text-primary font-bold text-2xl">MK {selectedListing.price.toLocaleString()}</span>
+                        <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">Fixed Monthly</p>
                     </div>
-                    <div className={`text-xs flex-shrink-0 font-semibold px-2 py-1 rounded ${statusStyles[listingData.status]}`}>
-                        {listingData.status}
+                </div>
+                <div className="flex items-center text-text-secondary text-sm mb-8 font-medium">
+                    <MapPinIcon className="w-4 h-4 mr-1.5 text-primary" /> {selectedListing.location}
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 mb-10">
+                    <div className="p-4 bg-secondary rounded-[24px] flex items-center gap-4">
+                        <div className="p-2 bg-primary/10 rounded-lg text-primary"><BedIcon className="w-6 h-6" /></div>
+                        <div><p className="font-bold text-lg">{selectedListing.bedrooms}</p><p className="text-[10px] font-bold text-text-secondary uppercase">Bedrooms</p></div>
+                    </div>
+                    <div className="p-4 bg-secondary rounded-[24px] flex items-center gap-4">
+                        <div className="p-2 bg-primary/10 rounded-lg text-primary"><BathIcon className="w-6 h-6" /></div>
+                        <div><p className="font-bold text-lg">{selectedListing.bathrooms}</p><p className="text-[10px] font-bold text-text-secondary uppercase">Bathrooms</p></div>
                     </div>
                 </div>
 
-                <p className="font-heading text-primary font-bold text-2xl my-4">MK {listingData.price.toLocaleString()}{priceSuffix}</p>
-                
-                {(listingData.bedrooms || listingData.bathrooms) && (
-                     <div className="bg-white rounded-lg shadow-sm p-4 flex items-center text-text-secondary text-base space-x-6">
-                        {listingData.bedrooms && (
-                            <div className="flex items-center">
-                                <BedIcon className="w-5 h-5 mr-2 text-primary" />
-                                <span>{listingData.bedrooms} Bedrooms</span>
-                            </div>
-                        )}
-                        {listingData.bathrooms && (
-                            <div className="flex items-center">
-                                <BathIcon className="w-5 h-5 mr-2 text-primary" />
-                                <span>{listingData.bathrooms} Bathrooms</span>
-                            </div>
-                        )}
-                    </div>
-                )}
-                
-                <div className="mt-4 bg-white rounded-lg shadow-sm p-4">
-                    <h2 className="font-heading text-lg font-semibold text-text-primary mb-2">Description</h2>
-                    <p className="text-text-secondary">{listingData.description}</p>
-                </div>
-                
-                {showAmenities && (
-                    <div className="mt-4 bg-white rounded-lg shadow-sm p-4">
-                        <h2 className="font-heading text-lg font-semibold text-text-primary mb-4">Amenities</h2>
-                        <div className="grid grid-cols-4 gap-y-4 text-center">
-                            {amenities.slice(0, 4).map(amenity => <AmenityItem key={amenity.name} icon={amenity.icon} label={amenity.name} />)}
+                <h3 className="font-bold text-lg mb-4 font-heading">House Features</h3>
+                <div className="flex flex-wrap gap-2 mb-10">
+                    {fullLoading ? (
+                        <div className="flex gap-2">
+                            <div className="h-8 w-24 bg-gray-100 rounded-full animate-pulse"></div>
+                            <div className="h-8 w-24 bg-gray-100 rounded-full animate-pulse"></div>
                         </div>
-                    </div>
-                )}
-
-                <div className="mt-4 bg-white rounded-lg shadow-sm overflow-hidden">
-                    <div className="p-4">
-                        <h2 className="font-heading text-lg font-semibold text-text-primary mb-2">Location</h2>
-                        <div className="flex items-center text-text-secondary text-base">
-                            <MapPinIcon className="w-4 h-4 mr-1.5 flex-shrink-0" />
-                            <span>{listingData.location}</span>
-                        </div>
-                    </div>
-                    <img src="https://picsum.photos/seed/map1/800/400" alt="Map of location" className="w-full h-40 object-cover" />
-                </div>
-                
-                <div className="mt-4 bg-white rounded-lg shadow-sm p-4">
-                    <h2 className="font-heading text-lg font-semibold text-text-primary mb-3">About the Seller</h2>
-                    <div className="flex items-center mb-4">
-                        <img src={`https://picsum.photos/seed/seller${listingData.sellerId}/100`} alt={listingData.sellerName} className="w-12 h-12 rounded-full mr-4 bg-gray-200" />
-                        <div>
-                            <p className="font-semibold text-text-primary">{listingData.sellerName}</p>
-                            <p className="text-sm text-text-secondary">Seller</p>
-                        </div>
-                    </div>
-                     {isAuthenticated ? (
-                         <div className="flex gap-3">
-                            {listingData.phoneNumber && (
-                                <a href={`tel:${listingData.phoneNumber}`} className="flex-1 bg-primary/10 text-primary font-semibold py-3 px-4 rounded-lg flex items-center justify-center hover:bg-primary/20 transition-colors">
-                                    <PhoneIcon className="w-5 h-5 mr-2" /> Call
-                                </a>
-                            )}
-                            {listingData.email && (
-                                <a href={`mailto:${listingData.email}`} className="flex-1 bg-gray-200 text-text-primary font-semibold py-3 px-4 rounded-lg flex items-center justify-center hover:bg-gray-300 transition-colors">
-                                    <MailIcon className="w-5 h-5 mr-2" /> Email
-                                </a>
-                            )}
-                         </div>
                     ) : (
-                        <div className="text-center p-4 border-t border-border-soft -m-4 mt-4">
-                            <p className="text-text-secondary text-sm">Please log in to view contact details.</p>
-                             <button
-                                onClick={() => handleActionClick(() => {})}
-                                className="mt-2 text-sm font-semibold text-primary hover:underline"
-                            >
-                                Login / Register
-                            </button>
-                        </div>
+                        selectedListing.amenities?.map((amenity, i) => (
+                            <div key={i} className="px-4 py-2 bg-blue-50 text-primary rounded-full text-xs font-bold border border-blue-100 flex items-center gap-2">
+                                {amenity.includes('Solar') ? <SunIcon className="w-3.5 h-3.5" /> : amenity.includes('Borehole') ? <DropletsIcon className="w-3.5 h-3.5" /> : <ShieldCheckIcon className="w-3.5 h-3.5" />}
+                                {amenity}
+                            </div>
+                        ))
                     )}
                 </div>
-                
-                <div className="mt-4 bg-white rounded-lg shadow-sm">
-                    <div className="flex justify-between items-center p-4">
-                        <h2 className="font-heading text-lg font-semibold text-text-primary">Reviews</h2>
-                         {isAuthenticated && (
-                            <button onClick={() => setIsReviewModalOpen(true)} className="text-sm font-semibold text-primary hover:underline">
-                                Leave a Review
-                            </button>
-                        )}
+
+                <h3 className="font-bold text-lg mb-3 font-heading">Description</h3>
+                {fullLoading ? (
+                    <div className="space-y-2 mb-10">
+                        <div className="h-4 bg-gray-100 rounded w-full animate-pulse"></div>
+                        <div className="h-4 bg-gray-100 rounded w-full animate-pulse"></div>
+                        <div className="h-4 bg-gray-100 rounded w-2/3 animate-pulse"></div>
                     </div>
-                    <div className="px-4 divide-y divide-border-soft">
-                        {reviews.length > 0 ? (
-                            reviews.map(review => <ReviewCard key={review.id} review={review} />)
-                        ) : (
-                            <div className="text-center py-8">
-                                <p className="text-text-secondary">No reviews yet.</p>
-                                <p className="text-sm text-gray-400">Be the first to share your experience!</p>
+                ) : (
+                    <p className="text-text-secondary text-sm leading-relaxed mb-10">{selectedListing.description || 'Loading property details...'}</p>
+                )}
+                
+                <div className="p-5 border-2 border-border-soft rounded-[32px] flex items-center gap-4 mb-6">
+                    <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center font-bold text-primary text-xl border border-primary/20">{selectedListing.sellerName[0]}</div>
+                    <div className="flex-grow">
+                        <div className="flex items-center gap-2">
+                            <p className="font-bold">{selectedListing.sellerName}</p>
+                            {selectedListing.isVerified && <ShieldCheckIcon className="w-4 h-4 text-primary fill-primary/10" />}
+                        </div>
+                        <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">Property Agent</p>
+                    </div>
+                    <button onClick={startChat} className="p-3 bg-secondary text-primary rounded-2xl hover:bg-primary/10 transition-colors">
+                        <MessageSquareIcon className="w-5 h-5" />
+                    </button>
+                </div>
+            </div>
+            <div className="fixed bottom-0 left-0 right-0 p-6 bg-white border-t border-border-soft flex gap-4 z-20 max-w-sm mx-auto backdrop-blur-md bg-white/90">
+                <a href={`tel:${selectedListing.phoneNumber || '0999000000'}`} className="flex-1 bg-secondary text-primary py-4 rounded-[20px] font-bold flex items-center justify-center gap-2 transition-all active:scale-95 border border-border-soft">
+                    <PhoneIcon className="w-5 h-5" /> CALL
+                </a>
+                <button onClick={() => setShowBookingModal(true)} className="flex-1 bg-primary text-white py-4 rounded-[20px] font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-primary/30">
+                    <CalendarIcon className="w-5 h-5" /> BOOK TOUR
+                </button>
+            </div>
+
+            {/* Booking Modal */}
+            {showBookingModal && (
+                <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-4 backdrop-blur-sm" onClick={() => setShowBookingModal(false)}>
+                    <div className="bg-white w-full max-w-sm rounded-[32px] p-8 space-y-8 animate-slide-up" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center">
+                            <h3 className="text-2xl font-bold font-heading">Schedule Viewing</h3>
+                            <button onClick={() => setShowBookingModal(false)} className="text-text-secondary font-bold text-sm">Close</button>
+                        </div>
+                        
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">Pick a Date</label>
+                            <input 
+                                type="date" 
+                                value={bookingDate}
+                                onChange={e => setBookingDate(e.target.value)}
+                                className="w-full bg-secondary p-4 rounded-2xl outline-none font-bold text-sm border border-transparent focus:border-primary"
+                                min={new Date().toISOString().split('T')[0]}
+                            />
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">Preferred Time</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {(['Morning', 'Afternoon', 'Evening'] as const).map(slot => (
+                                    <button 
+                                        key={slot}
+                                        onClick={() => setTimeSlot(slot)}
+                                        className={`py-3 rounded-xl text-[10px] font-bold uppercase transition-all border-2 ${timeSlot === slot ? 'bg-primary/5 text-primary border-primary' : 'bg-white text-gray-400 border-border-soft'}`}
+                                    >
+                                        {slot}
+                                    </button>
+                                ))}
                             </div>
-                        )}
+                            <p className="text-[9px] text-text-secondary font-medium leading-relaxed italic">The agent will verify availability and confirm your request.</p>
+                        </div>
+
+                        <Button onClick={handleBooking} disabled={bookingLoading}>
+                            {bookingLoading ? <LoaderIcon className="animate-spin mx-auto w-5 h-5" /> : 'CONFIRM REQUEST'}
+                        </Button>
                     </div>
                 </div>
-
-            </div>
-            <div className="fixed bottom-0 left-0 right-0 max-w-sm mx-auto bg-white p-3 border-t border-border-soft flex items-center gap-3">
-                 <Button onClick={() => handleActionClick(() => setShowInquiryModal(true))} variant="outline" className="w-full">
-                    Inquire Now
-                </Button>
-                {isViewable && (
-                    <Button onClick={() => handleActionClick(() => setShowScheduleModal(true))} className="w-full">
-                        Schedule Viewing
-                    </Button>
-                )}
-            </div>
-             {showBookingConfirmationModal && <BookingConfirmationModal onClose={() => setShowBookingConfirmationModal(false)} />}
-             {showInquiryConfirmationModal && <InquiryConfirmationModal onClose={() => setShowInquiryConfirmationModal(false)} />}
-             {showLoginModal && <LoginRequiredModal onClose={() => setShowLoginModal(false)} />}
-             {isReviewModalOpen && <LeaveReviewModal onClose={() => setIsReviewModalOpen(false)} onSubmit={handleReviewSubmit} />}
-             {showScheduleModal && <ScheduleViewingModal onClose={() => setShowScheduleModal(false)} onSubmit={handleScheduleSubmit} />}
-             {showInquiryModal && <InquiryModal listing={listingData} onClose={() => setShowInquiryModal(false)} onSubmit={handleInquirySubmit} />}
+            )}
         </div>
     );
 };
 
-export const MessagesScreen: React.FC = () => {
-    const { setCurrentScreen, selectedListing } = useAppContext();
-    const [messages, setMessages] = useState(MOCK_MESSAGES);
-    const [newMessage, setNewMessage] = useState('');
-    const [isRefreshing, setIsRefreshing] = useState(false);
-    const [pullPosition, setPullPosition] = useState(0);
-    const scrollRef = useRef<HTMLDivElement>(null);
-    const pullStartRef = useRef<number | null>(null);
-    const chatEndRef = useRef<HTMLDivElement>(null);
+export const BookingsScreen: React.FC = () => {
+    const { setCurrentScreen, userRole } = useAppContext();
+    const [bookings, setBookings] = useState<Booking[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    const PULL_THRESHOLD = 80;
-    const PULL_RESISTANCE = 0.5;
+    const fetchBookings = async () => {
+        setLoading(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { setLoading(false); return; }
 
-    const scrollToBottom = () => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
-
-    useEffect(scrollToBottom, [messages]);
-
-    const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-        if (scrollRef.current && scrollRef.current.scrollTop === 0) {
-            pullStartRef.current = e.touches[0].clientY;
+        let query = supabase.from('viewings').select('*, listings(title, image_url)');
+        
+        if (userRole === UserRole.SELLER) {
+            query = query.eq('landlord_id', user.id);
         } else {
-            pullStartRef.current = null;
+            query = query.eq('tenant_id', user.id);
         }
+
+        const { data } = await query.order('viewing_date', { ascending: true });
+        if (data) setBookings(data.map((b: any) => ({
+            ...b,
+            listing_title: b.listings.title,
+            listing_image: b.listings.image_url
+        })));
+        setLoading(false);
     };
 
-    const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-        if (pullStartRef.current === null || isRefreshing) return;
-        const touchY = e.touches[0].clientY;
-        const pullDelta = touchY - pullStartRef.current;
-        if (pullDelta > 0) {
-            e.preventDefault();
-            const newPullPosition = Math.min(pullDelta * PULL_RESISTANCE, PULL_THRESHOLD + 40);
-            setPullPosition(newPullPosition);
-        }
+    const updateBookingStatus = async (id: string, status: string) => {
+        const { error } = await supabase.from('viewings').update({ status }).eq('id', id);
+        if (error) alert('Failed to update: ' + error.message);
+        else fetchBookings();
     };
 
-    const handleTouchEnd = () => {
-        if (pullStartRef.current === null || isRefreshing) return;
-        pullStartRef.current = null;
-        if (pullPosition >= PULL_THRESHOLD) {
-            setIsRefreshing(true);
-            setPullPosition(60);
-
-            setTimeout(() => {
-                const newReply = {
-                    id: messages.length + 1,
-                    sender: 'other' as const,
-                    text: 'I have received your request. Let me check my schedule.',
-                    timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-                };
-                setMessages(prev => [...prev, newReply]);
-                setIsRefreshing(false);
-                setPullPosition(0);
-            }, 1500);
-        } else {
-            setPullPosition(0);
-        }
-    };
-
-    const handleSend = () => {
-        if (newMessage.trim()) {
-            const newMsg = {
-                id: messages.length + 1,
-                sender: 'me' as const,
-                text: newMessage.trim(),
-                timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-            };
-            setMessages([...messages, newMsg]);
-            setNewMessage('');
-        }
-    };
-    
-    const contactName = selectedListing?.sellerName || "Messages";
-    const backScreen = selectedListing ? Screen.LISTING_DETAILS : Screen.HOME_SCREEN;
+    useEffect(() => { fetchBookings(); }, [userRole]);
 
     return (
-        <div className="flex flex-col h-full bg-secondary">
-            <Header title={contactName} onBack={() => setCurrentScreen(backScreen)} />
-            <div
-                ref={scrollRef}
-                className="flex-grow overflow-y-auto scrollbar-hide"
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-            >
-                <div
-                    className={`transition-transform duration-300 relative ${pullStartRef.current !== null ? '!duration-0' : ''}`}
-                    style={{ transform: `translateY(${pullPosition}px)` }}
-                >
-                    <div className="absolute top-0 left-0 right-0 h-[60px] flex items-center justify-center -translate-y-full pointer-events-none">
-                        {isRefreshing ? (
-                            <LoaderIcon className="w-6 h-6 text-primary animate-spin" />
-                        ) : (
-                            <ArrowDownIcon 
-                                className="w-6 h-6 text-text-secondary transition-transform duration-200"
-                                style={{ 
-                                    opacity: Math.min(pullPosition / PULL_THRESHOLD, 1),
-                                    transform: `rotate(${pullPosition >= PULL_THRESHOLD ? '180deg' : '0deg'})` 
-                                }}
-                            />
-                        )}
-                    </div>
-                    <div className="p-4 space-y-4">
-                        {messages.map(msg => (
-                            <div key={msg.id} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl shadow-sm ${
-                                    msg.sender === 'me'
-                                        ? 'bg-primary text-white rounded-br-lg'
-                                        : 'bg-white text-text-primary rounded-bl-lg'
-                                }`}>
-                                    <p className="text-sm">{msg.text}</p>
-                                    <span className={`text-xs mt-1 block text-right opacity-70`}>{msg.timestamp}</span>
+        <div className="flex flex-col h-full bg-secondary pb-20">
+            <Header title={userRole === UserRole.SELLER ? 'Property Tours' : 'My Viewing Tours'} />
+            <div className="p-4 flex-grow overflow-y-auto scrollbar-hide space-y-4">
+                {loading ? (
+                    <div className="flex justify-center p-20"><LoaderIcon className="animate-spin text-primary" /></div>
+                ) : bookings.length > 0 ? (
+                    bookings.map(b => (
+                        <div key={b.id} className="bg-white rounded-3xl p-4 shadow-sm border border-border-soft flex gap-4">
+                            <img src={b.listing_image} className="w-20 h-20 rounded-2xl object-cover shrink-0" />
+                            <div className="flex-grow min-w-0">
+                                <h4 className="font-bold text-sm truncate mb-1">{b.listing_title}</h4>
+                                <div className="flex items-center gap-4 mb-2">
+                                    <div className="flex items-center text-[10px] text-text-secondary font-bold uppercase gap-1">
+                                        <CalendarIcon className="w-3 h-3" /> {b.viewing_date}
+                                    </div>
+                                    <div className="flex items-center text-[10px] text-text-secondary font-bold uppercase gap-1">
+                                        <ClockIcon className="w-3 h-3" /> {b.time_slot}
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase ${
+                                        b.status === 'Confirmed' ? 'bg-green-100 text-green-600' :
+                                        b.status === 'Pending' ? 'bg-amber-100 text-amber-600' :
+                                        'bg-red-100 text-red-600'
+                                    }`}>
+                                        {b.status}
+                                    </span>
+                                    {userRole === UserRole.SELLER && b.status === 'Pending' && (
+                                        <div className="flex gap-2">
+                                            <button onClick={() => updateBookingStatus(b.id, 'Confirmed')} className="p-2 bg-primary text-white rounded-lg shadow-sm">
+                                                <CheckCircleIcon className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
-                        ))}
-                         <div ref={chatEndRef} />
+                        </div>
+                    ))
+                ) : (
+                    <div className="flex flex-col items-center justify-center py-24 text-center px-10">
+                        <CalendarIcon className="w-16 h-16 text-gray-100 mb-6" />
+                        <h3 className="font-bold text-xl font-heading mb-2">No Scheduled Viewings</h3>
+                        <p className="text-sm text-text-secondary leading-relaxed">Book a viewing to see a property in person. Be safe and always meet in the daytime!</p>
                     </div>
-                </div>
-            </div>
-            <div className="p-2 bg-white border-t border-border-soft flex items-center gap-2">
-                <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                    placeholder="Type a message..."
-                    className="w-full px-4 py-2 bg-gray-100 rounded-full border border-transparent focus:ring-primary focus:border-primary focus:bg-white transition-colors"
-                />
-                <button
-                    onClick={handleSend}
-                    className="p-3 bg-primary text-white rounded-full hover:bg-green-700 transition-colors flex-shrink-0"
-                    aria-label="Send message"
-                >
-                    <SendIcon className="w-5 h-5" />
-                </button>
+                )}
             </div>
         </div>
     );
 };
 
 export const FavoritesScreen: React.FC = () => {
-    const { setCurrentScreen, setSelectedListing } = useAppContext();
-    const [favorites, setFavorites] = useState<Listing[]>(MOCK_LISTINGS.slice(1, 3)); // Mock favorites
+    const { setCurrentScreen, setSelectedListing, isAuthenticated } = useAppContext();
+    const [favorites, setFavorites] = useState<Listing[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    const handleListingClick = (listing: Listing) => {
-        setSelectedListing(listing);
-        setCurrentScreen(Screen.LISTING_DETAILS);
-    };
+    useEffect(() => {
+        const fetchFavorites = async () => {
+            if (!isAuthenticated) { setLoading(false); return; }
+            setLoading(true);
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) { setLoading(false); return; }
+
+            const { data } = await supabase
+                .from('favorites')
+                .select('listings(*)')
+                .eq('user_id', user.id);
+            
+            if (data) {
+                setFavorites(data.map((f: any) => ({
+                    ...f.listings,
+                    priceType: f.listings.price_type,
+                    imageUrl: f.listings.image_url,
+                    sellerId: f.listings.seller_id,
+                    sellerName: f.listings.seller_name,
+                    isVerified: f.listings.is_verified || false
+                })));
+            }
+            setLoading(false);
+        };
+        fetchFavorites();
+    }, [isAuthenticated]);
 
     return (
-        <div className="flex flex-col h-full bg-secondary">
-            <Header title="Favorites" />
-            <div className="flex-grow overflow-y-auto p-4 scrollbar-hide">
-                {favorites.length > 0 ? (
-                    favorites.map(listing => (
-                        <ListingCard key={listing.id} listing={listing} onClick={() => handleListingClick(listing)} />
+        <div className="flex flex-col h-full bg-secondary pb-20">
+            <Header title="Saved Properties" />
+            <div className="p-4 flex-grow overflow-y-auto scrollbar-hide">
+                {loading ? (
+                    <div className="space-y-4">
+                        <ListingSkeleton />
+                        <ListingSkeleton />
+                    </div>
+                ) : favorites.length > 0 ? (
+                    favorites.map(l => <ListingCard key={l.id} listing={l} onClick={() => { setSelectedListing(l); setCurrentScreen(Screen.LISTING_DETAILS); }} />)
+                ) : (
+                    <div className="flex flex-col items-center justify-center py-24 text-center px-10">
+                        <HeartIcon className="w-16 h-16 text-gray-100 mb-6" />
+                        <h3 className="font-bold text-xl font-heading mb-2">No Favorites Yet</h3>
+                        <p className="text-sm text-text-secondary leading-relaxed">Tap the heart on any property to save it for later viewing.</p>
+                        <Button onClick={() => setCurrentScreen(Screen.HOME_SCREEN)} className="mt-8 max-w-[200px]">EXPLORE NOW</Button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+export const MessagesScreen: React.FC = () => {
+    const { setCurrentScreen, setActiveChatPartner } = useAppContext();
+    const [conversations, setConversations] = useState<Conversation[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchConversations = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) { setLoading(false); return; }
+
+            // Simplified conversation fetching: get unique partners from messages
+            const { data: messages } = await supabase
+                .from('messages')
+                .select('*')
+                .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+                .order('created_at', { ascending: false });
+
+            if (messages) {
+                const partners = new Map<string, any>();
+                messages.forEach((m: any) => {
+                    const partnerId = m.sender_id === user.id ? m.receiver_id : m.sender_id;
+                    if (!partners.has(partnerId)) {
+                        partners.set(partnerId, {
+                            id: partnerId,
+                            last_message: m.text,
+                            partner_name: `Agent ${partnerId.substring(0, 4)}`,
+                            partner_id: partnerId
+                        });
+                    }
+                });
+                setConversations(Array.from(partners.values()));
+            }
+            setLoading(false);
+        };
+        fetchConversations();
+    }, []);
+
+    return (
+        <div className="flex flex-col h-full bg-secondary pb-20">
+            <Header title="Conversations" />
+            <div className="flex-grow overflow-y-auto scrollbar-hide">
+                {loading ? (
+                    <div className="p-10 flex justify-center"><LoaderIcon className="animate-spin text-primary" /></div>
+                ) : conversations.length > 0 ? (
+                    conversations.map(c => (
+                        <div 
+                            key={c.id} 
+                            onClick={() => { setActiveChatPartner({ id: c.partner_id, name: c.partner_name }); setCurrentScreen(Screen.CHAT_ROOM); }}
+                            className="bg-white p-5 border-b border-border-soft flex items-center gap-4 active:bg-secondary transition-colors"
+                        >
+                            <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center font-bold text-primary text-lg border border-primary/20 shrink-0 uppercase">
+                                {c.partner_name[0]}
+                            </div>
+                            <div className="flex-grow min-w-0">
+                                <div className="flex justify-between items-center mb-1">
+                                    <h4 className="font-bold text-sm truncate">{c.partner_name}</h4>
+                                    <span className="text-[10px] text-gray-400 font-bold uppercase">Today</span>
+                                </div>
+                                <p className="text-xs text-text-secondary truncate font-medium">{c.last_message}</p>
+                            </div>
+                            <ChevronRightIcon className="w-5 h-5 text-gray-300" />
+                        </div>
                     ))
                 ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-center text-text-secondary">
-                        <HeartIcon className="w-16 h-16 mb-4 text-gray-300" />
-                        <h2 className="font-heading text-xl font-semibold">No Favorites Yet</h2>
-                        <p className="mt-2">Tap the heart on a listing to save it here.</p>
+                    <div className="flex flex-col items-center justify-center py-24 text-center px-10">
+                        <MessageSquareIcon className="w-16 h-16 text-gray-100 mb-6" />
+                        <h3 className="font-bold text-xl font-heading mb-2">No Messages</h3>
+                        <p className="text-sm text-text-secondary leading-relaxed">Contact agents or landlords about listings to start a chat here.</p>
                     </div>
                 )}
             </div>
@@ -1120,271 +694,520 @@ export const FavoritesScreen: React.FC = () => {
 
 export const ProfileScreen: React.FC = () => {
     const { setCurrentScreen, userRole, setUserRole, setIsAuthenticated } = useAppContext();
-    
-    const handleLogout = () => {
-        setUserRole(UserRole.NONE);
+    const [userName, setUserName] = useState('NyumbaNow User');
+
+    useEffect(() => {
+        const fetchUser = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user && user.email) {
+                setUserName(user.email.split('@')[0]);
+            }
+        };
+        fetchUser();
+    }, []);
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
         setIsAuthenticated(false);
-        setCurrentScreen(Screen.HOME_SCREEN);
+        setCurrentScreen(Screen.LOGIN);
     };
 
-    const profileName = userRole === UserRole.BUYER ? "John Doe" : "Jane Smith";
-    const profileEmail = "example@email.com";
+    const toggleRole = () => {
+        const newRole = userRole === UserRole.BUYER ? UserRole.SELLER : UserRole.BUYER;
+        setUserRole(newRole);
+        setCurrentScreen(newRole === UserRole.BUYER ? Screen.HOME_SCREEN : Screen.DASHBOARD);
+    };
 
-    const menuItems = [
-        { label: 'Edit Profile', icon: UserIcon, screen: Screen.EDIT_PROFILE },
-        { label: 'Settings', icon: SettingsIcon, screen: Screen.SETTINGS },
-        { label: 'Rules & Policies', icon: FileTextIcon, screen: Screen.RULES_AND_POLICIES },
-        { label: 'About MarketPaLine', icon: InfoIcon, screen: Screen.ABOUT },
-    ];
+    return (
+        <div className="flex flex-col h-full bg-secondary pb-20">
+            <div className="p-10 pt-16 bg-white rounded-b-[48px] shadow-sm flex flex-col items-center text-center border-b border-border-soft">
+                <div className="w-24 h-24 bg-secondary rounded-[32px] flex items-center justify-center mb-6 border-4 border-white shadow-xl">
+                    <UserIcon className="w-12 h-12 text-gray-300" />
+                </div>
+                <h2 className="text-3xl font-bold font-heading mb-1 tracking-tight capitalize">{userName}</h2>
+                <div className="px-3 py-1 bg-primary/10 rounded-full text-primary text-[10px] font-bold uppercase tracking-widest border border-primary/20">
+                    {userRole} Account
+                </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+                <div className="bg-white rounded-[32px] overflow-hidden shadow-sm border border-border-soft">
+                    <button onClick={() => setCurrentScreen(Screen.EDIT_PROFILE)} className="w-full p-6 flex items-center justify-between hover:bg-secondary transition-colors border-b border-border-soft">
+                        <div className="flex items-center gap-4">
+                            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl"><UserIcon className="w-5 h-5" /></div>
+                            <span className="font-bold text-sm text-text-primary">Personal Details</span>
+                        </div>
+                        <ChevronRightIcon className="w-5 h-5 text-gray-300" />
+                    </button>
+                    <button onClick={() => setCurrentScreen(Screen.NOTIFICATIONS)} className="w-full p-6 flex items-center justify-between hover:bg-secondary transition-colors border-b border-border-soft">
+                        <div className="flex items-center gap-4">
+                            <div className="p-2 bg-purple-50 text-purple-600 rounded-xl"><BellIcon className="w-5 h-5" /></div>
+                            <span className="font-bold text-sm text-text-primary">Alert Settings</span>
+                        </div>
+                        <ChevronRightIcon className="w-5 h-5 text-gray-300" />
+                    </button>
+                    <button onClick={() => setCurrentScreen(Screen.RULES_AND_POLICIES)} className="w-full p-6 flex items-center justify-between hover:bg-secondary transition-colors border-b border-border-soft">
+                        <div className="flex items-center gap-4">
+                            <div className="p-2 bg-green-50 text-green-600 rounded-xl"><ShieldCheckIcon className="w-5 h-5" /></div>
+                            <span className="font-bold text-sm text-text-primary">Safety & Verification</span>
+                        </div>
+                        <ChevronRightIcon className="w-5 h-5 text-gray-300" />
+                    </button>
+                    <button onClick={() => setCurrentScreen(Screen.SETTINGS)} className="w-full p-6 flex items-center justify-between hover:bg-secondary transition-colors border-b border-border-soft">
+                        <div className="flex items-center gap-4">
+                            <div className="p-2 bg-gray-100 text-gray-600 rounded-xl"><SettingsIcon className="w-5 h-5" /></div>
+                            <span className="font-bold text-sm text-text-primary">Preferences</span>
+                        </div>
+                        <ChevronRightIcon className="w-5 h-5 text-gray-300" />
+                    </button>
+                    <button onClick={() => setCurrentScreen(Screen.ABOUT)} className="w-full p-6 flex items-center justify-between hover:bg-secondary transition-colors">
+                        <div className="flex items-center gap-4">
+                            <div className="p-2 bg-amber-50 text-amber-600 rounded-xl"><NyumbaNowLogo className="w-5 h-5" /></div>
+                            <span className="font-bold text-sm text-text-primary">About NyumbaNow</span>
+                        </div>
+                        <ChevronRightIcon className="w-5 h-5 text-gray-300" />
+                    </button>
+                </div>
+
+                <button 
+                    onClick={toggleRole}
+                    className="w-full bg-primary/5 p-6 rounded-[32px] border-2 border-dashed border-primary/30 flex items-center justify-between group hover:border-primary transition-all active:scale-95"
+                >
+                    <div className="text-left">
+                        <p className="text-[10px] font-bold text-primary uppercase tracking-widest mb-1">Switch Mode</p>
+                        <p className="font-bold text-sm text-text-primary">Switch to {userRole === UserRole.BUYER ? 'Seller' : 'Buyer'} Hub</p>
+                    </div>
+                    <div className="w-10 h-10 bg-primary text-white rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
+                        <BriefcaseIcon className="w-5 h-5" />
+                    </div>
+                </button>
+
+                <button onClick={handleLogout} className="w-full p-6 flex items-center justify-center gap-3 text-red-500 font-bold text-sm bg-red-50 rounded-[32px] hover:bg-red-100 transition-colors">
+                    <LogOutIcon className="w-5 h-5" /> SIGN OUT
+                </button>
+                
+                <p className="text-center text-[10px] font-bold text-gray-300 uppercase tracking-[4px] mt-10 pb-10">NyumbaNow Malawi</p>
+            </div>
+        </div>
+    );
+};
+
+export const ChatRoomScreen: React.FC = () => {
+    const { activeChatPartner, setCurrentScreen } = useAppContext();
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [input, setInput] = useState('');
+    const [myId, setMyId] = useState<string | null>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const setup = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            setMyId(user.id);
+            
+            const { data } = await supabase
+                .from('messages')
+                .select('*')
+                .or(`and(sender_id.eq.${user.id},receiver_id.eq.${activeChatPartner?.id}),and(sender_id.eq.${activeChatPartner?.id},receiver_id.eq.${user.id})`)
+                .order('created_at', { ascending: true });
+            
+            if (data) setMessages(data);
+
+            const channel = supabase.channel('realtime_messages')
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+                    const newMsg = payload.new as Message;
+                    if ((newMsg.sender_id === user.id && newMsg.receiver_id === activeChatPartner?.id) || 
+                        (newMsg.sender_id === activeChatPartner?.id && newMsg.receiver_id === user.id)) {
+                        setMessages(prev => [...prev, newMsg]);
+                    }
+                })
+                .subscribe();
+
+            return () => { supabase.removeChannel(channel); };
+        };
+        setup();
+    }, [activeChatPartner]);
+
+    useEffect(() => {
+        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }, [messages]);
+
+    const sendMessage = async () => {
+        if (!input.trim() || !myId || !activeChatPartner) return;
+        const msgText = input.trim();
+        setInput('');
+        
+        // Optimistic UI for chat
+        const tempId = Date.now();
+        const optimisticMsg: Message = {
+            id: tempId,
+            sender_id: myId,
+            receiver_id: activeChatPartner.id,
+            text: msgText,
+            created_at: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, optimisticMsg]);
+
+        const { error } = await supabase.from('messages').insert({ sender_id: myId, receiver_id: activeChatPartner.id, text: msgText });
+        if (error) {
+            alert('Message could not be sent.');
+            setMessages(prev => prev.filter(m => m.id !== tempId));
+        }
+    };
+
+    return (
+        <div className="flex flex-col h-full bg-white relative">
+            <div className="p-4 border-b border-border-soft flex items-center bg-white sticky top-0 z-10 shadow-sm backdrop-blur-md">
+                <button onClick={() => setCurrentScreen(Screen.MESSAGES)} className="mr-3 p-2 bg-secondary rounded-full">
+                    <ChevronLeftIcon className="w-5 h-5" />
+                </button>
+                <div className="w-10 h-10 bg-primary/10 rounded-2xl flex items-center justify-center font-bold text-primary mr-3 uppercase border border-primary/20">
+                    {activeChatPartner?.name[0]}
+                </div>
+                <div className="flex-grow">
+                    <h3 className="font-bold text-sm tracking-tight">{activeChatPartner?.name}</h3>
+                    <div className="flex items-center gap-1.5">
+                        <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                        <p className="text-[10px] text-green-600 font-bold uppercase tracking-wider">Active Agent</p>
+                    </div>
+                </div>
+                <button onClick={() => window.location.href=`tel:0999000000`} className="p-2 bg-blue-50 text-primary rounded-full">
+                    <PhoneIcon className="w-5 h-5" />
+                </button>
+            </div>
+
+            <div ref={scrollRef} className="flex-grow p-5 overflow-y-auto space-y-6 pb-24 scrollbar-hide bg-secondary/20">
+                {messages.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-20 text-center gap-4 opacity-50">
+                        <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center shadow-sm">
+                            <ShieldCheckIcon className="w-8 h-8 text-primary" />
+                        </div>
+                        <div className="max-w-[200px]">
+                            <h4 className="font-bold text-sm mb-1 text-text-primary">Encrypted & Secure</h4>
+                            <p className="text-[10px] font-medium leading-relaxed">Always visit houses in person with a friend. Never pay before viewing.</p>
+                        </div>
+                    </div>
+                )}
+                {messages.map((m) => {
+                    const isMe = m.sender_id === myId;
+                    return (
+                        <div key={m.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[80%] px-5 py-3 rounded-[24px] text-sm shadow-sm leading-relaxed ${
+                                isMe ? 'bg-primary text-white rounded-tr-none' : 'bg-white text-text-primary rounded-tl-none border border-border-soft'
+                            }`}>
+                                {m.text}
+                                <p className={`text-[9px] mt-2 font-bold opacity-60 flex items-center gap-1 justify-end uppercase tracking-widest`}>
+                                    {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            <div className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-border-soft flex gap-2 items-center shadow-2xl">
+                <input 
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && sendMessage()}
+                    type="text" 
+                    placeholder="Type a message..." 
+                    className="flex-grow bg-secondary px-6 py-4 rounded-[24px] outline-none text-sm font-medium focus:ring-2 focus:ring-primary/20 transition-all border border-transparent focus:border-primary/30"
+                />
+                <button 
+                    onClick={sendMessage}
+                    className="p-4 bg-primary text-white rounded-[20px] transition-transform active:scale-90 shadow-xl shadow-primary/30"
+                >
+                    <SendIcon className="w-5 h-5" />
+                </button>
+            </div>
+        </div>
+    );
+};
+
+export const BoostListingScreen: React.FC = () => {
+    const { setCurrentScreen, selectedListing } = useAppContext();
+    const [method, setMethod] = useState<'airtel' | 'tnm'>('airtel');
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [step, setStep] = useState(1);
+
+    const handlePayment = () => {
+        setIsProcessing(true);
+        // Simulate Mobile Money Push Request
+        setTimeout(() => {
+            setIsProcessing(false);
+            setStep(2);
+        }, 3000);
+    };
+
+    if (!selectedListing) return null;
 
     return (
         <div className="flex flex-col h-full bg-secondary">
-            <Header title="Profile" />
-            <div className="flex-grow overflow-y-auto p-4 scrollbar-hide">
-                <div className="flex flex-col items-center mb-8">
-                    <div className="w-24 h-24 rounded-full bg-gray-300 mb-4 flex items-center justify-center">
-                         <UserIcon className="w-12 h-12 text-gray-500" />
-                    </div>
-                    <h1 className="font-heading text-2xl font-bold">{profileName}</h1>
-                    <p className="text-text-secondary">{profileEmail}</p>
-                </div>
+            <Header title="Boost Listing" onBack={() => setCurrentScreen(Screen.DASHBOARD)} />
+            <div className="p-6 flex-grow flex flex-col items-center">
+                {step === 1 ? (
+                    <>
+                        <div className="bg-white p-8 rounded-[40px] shadow-sm text-center mb-8 w-full border border-amber-200">
+                            <SunIcon className="w-16 h-16 text-amber-500 mx-auto mb-4 animate-pulse" />
+                            <h2 className="text-2xl font-bold font-heading mb-2">NyumbaBoost</h2>
+                            <p className="text-sm text-text-secondary">Get 10x more inquiries by featuring your house at the top for 7 days.</p>
+                            <div className="mt-6 p-4 bg-amber-50 rounded-2xl flex items-center justify-between font-bold border border-amber-100">
+                                <span className="text-amber-700">Service Fee:</span>
+                                <span className="text-amber-800 text-xl">MK 5,000</span>
+                            </div>
+                        </div>
 
-                <div className="bg-white rounded-lg shadow-sm">
-                    {menuItems.map((item, index) => (
-                         <button key={item.label} onClick={() => setCurrentScreen(item.screen)} className={`w-full flex items-center p-4 text-left ${index < menuItems.length - 1 ? 'border-b border-border-soft' : ''}`}>
-                            <item.icon className="w-6 h-6 mr-4 text-primary" />
-                            <span className="flex-grow font-semibold text-text-primary">{item.label}</span>
-                            <ChevronRightIcon className="w-5 h-5 text-text-secondary" />
-                        </button>
-                    ))}
-                </div>
-                
-                 <div className="mt-6 bg-white rounded-lg shadow-sm">
-                    <button onClick={handleLogout} className="w-full flex items-center p-4 text-left text-red-500">
-                        <LogOutIcon className="w-6 h-6 mr-4" />
-                        <span className="flex-grow font-semibold">Logout</span>
-                    </button>
-                </div>
+                        <div className="w-full space-y-4 mb-10">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">Payment Method</label>
+                            <div className="grid grid-cols-2 gap-4">
+                                <button 
+                                    onClick={() => setMethod('airtel')}
+                                    className={`p-6 rounded-3xl border-2 flex flex-col items-center transition-all ${method === 'airtel' ? 'border-primary bg-primary/5' : 'border-white bg-white shadow-sm'}`}
+                                >
+                                    <div className="w-10 h-10 bg-red-600 rounded-full mb-2 flex items-center justify-center font-bold text-white text-xs">A</div>
+                                    <span className="font-bold text-xs">Airtel Money</span>
+                                </button>
+                                <button 
+                                    onClick={() => setMethod('tnm')}
+                                    className={`p-6 rounded-3xl border-2 flex flex-col items-center transition-all ${method === 'tnm' ? 'border-primary bg-primary/5' : 'border-white bg-white shadow-sm'}`}
+                                >
+                                    <div className="w-10 h-10 bg-orange-500 rounded-full mb-2 flex items-center justify-center font-bold text-white text-xs">T</div>
+                                    <span className="font-bold text-xs">TNM Mpamba</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="w-full space-y-4">
+                            <input 
+                                type="tel" 
+                                placeholder="Enter Mobile Number" 
+                                className="w-full bg-white p-5 rounded-[24px] shadow-sm outline-none font-bold text-center text-lg border-2 border-transparent focus:border-primary transition-all"
+                            />
+                            <p className="text-[10px] text-text-secondary text-center font-medium">We will send a USSD prompt to your phone to confirm.</p>
+                        </div>
+                        
+                        <div className="flex-grow"></div>
+                        <Button onClick={handlePayment} disabled={isProcessing} className="mb-4">
+                            {isProcessing ? <LoaderIcon className="animate-spin mx-auto w-6 h-6" /> : 'CONFIRM & PAY'}
+                        </Button>
+                    </>
+                ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-center p-8 space-y-6">
+                        <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center animate-bounce">
+                            <CheckCircleIcon className="w-12 h-12" />
+                        </div>
+                        <h2 className="text-3xl font-bold font-heading">Successfully Boosted!</h2>
+                        <p className="text-sm text-text-secondary leading-relaxed">Your property is now featured at the top of search results in {selectedListing.location}.</p>
+                        <Button onClick={() => setCurrentScreen(Screen.DASHBOARD)} variant="success">RETURN TO HUB</Button>
+                    </div>
+                )}
             </div>
         </div>
     );
 };
 
 export const DashboardScreen: React.FC = () => {
-    const { setCurrentScreen } = useAppContext();
-    const stats = [{ label: 'Active Listings', value: 4 }, { label: 'Sold/Rented', value: 1 }, { label: 'Pending', value: 3 }];
+     const { setCurrentScreen, setSelectedListing } = useAppContext();
+     const [activeUnits, setActiveUnits] = useState<Listing[]>([]);
+     const [loading, setLoading] = useState(true);
 
-    const title = "Seller Dashboard";
-    
-    const actionItems = [
-        { id: 1, type: 'viewing', text: "New viewing request for '3 Bedroom in Area 49'", icon: CalendarIcon },
-        { id: 2, type: 'message', text: "Unread message from 'Potential Buyer'", icon: MessageSquareIcon },
-    ];
+     useEffect(() => {
+        const fetchMine = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            const { data } = await supabase.from('listings').select('*').eq('seller_id', user.id).limit(2);
+            if (data) setActiveUnits(data.map(i => ({ 
+                ...i, 
+                priceType: i.price_type, 
+                imageUrl: i.image_url, 
+                sellerId: i.seller_id, 
+                sellerName: i.seller_name,
+                isVerified: true
+            })));
+            setLoading(false);
+        };
+        fetchMine();
+    }, []);
+
+     return (
+        <div className="flex flex-col h-full bg-secondary pb-20">
+             <div className="p-8 pt-16 bg-white rounded-b-[48px] shadow-sm border-b border-border-soft">
+                 <h1 className="text-4xl font-bold mb-1 font-heading tracking-tight">Seller Hub</h1>
+                 <p className="text-text-secondary text-sm font-medium">Advertising in Lilongwe, Blantyre & Mzuzu.</p>
+             </div>
+             <div className="p-6 space-y-6">
+                 {/* Stats */}
+                 <div className="grid grid-cols-2 gap-4">
+                     <div className="bg-white p-6 rounded-[32px] shadow-sm border border-border-soft group transition-all hover:border-primary">
+                        <p className="text-4xl font-bold text-primary mb-1">{activeUnits.length}</p>
+                        <p className="text-[10px] text-text-secondary font-bold uppercase tracking-widest">Active Units</p>
+                     </div>
+                     <div className="bg-white p-6 rounded-[32px] shadow-sm border border-border-soft group transition-all hover:border-primary">
+                        <p className="text-4xl font-bold text-primary mb-1">12</p>
+                        <p className="text-[10px] text-text-secondary font-bold uppercase tracking-widest">Total Views</p>
+                     </div>
+                 </div>
+
+                 {/* My Active Units Quick Boost */}
+                 {activeUnits.length > 0 && (
+                     <div className="space-y-4">
+                         <div className="flex justify-between items-center px-2">
+                            <h3 className="font-bold text-sm tracking-tight">Promote Listings</h3>
+                            <button onClick={() => setCurrentScreen(Screen.MANAGE_LISTINGS)} className="text-[10px] font-bold text-primary uppercase">See All</button>
+                         </div>
+                         {activeUnits.map(unit => (
+                             <div key={unit.id} className="bg-white p-4 rounded-3xl flex items-center justify-between border border-border-soft shadow-sm">
+                                 <div className="flex items-center gap-3">
+                                     <img src={unit.imageUrl} className="w-12 h-12 rounded-xl object-cover" />
+                                     <div>
+                                         <p className="font-bold text-xs truncate w-32">{unit.title}</p>
+                                         <p className="text-[9px] text-text-secondary uppercase">Last updated: Today</p>
+                                     </div>
+                                 </div>
+                                 <button 
+                                    onClick={() => { setSelectedListing(unit); setCurrentScreen(Screen.BOOST_LISTING); }}
+                                    className="bg-amber-50 text-amber-700 px-4 py-2 rounded-xl text-[10px] font-bold border border-amber-100 flex items-center gap-2 hover:bg-amber-400 hover:text-white transition-all"
+                                 >
+                                     <SunIcon className="w-3.5 h-3.5" /> BOOST
+                                 </button>
+                             </div>
+                         ))}
+                     </div>
+                 )}
+
+                 <button onClick={() => setCurrentScreen(Screen.BOOKINGS)} className="w-full bg-white p-6 rounded-[32px] shadow-sm border border-border-soft flex items-center justify-between font-bold transition-all hover:border-primary active:scale-95">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-primary/10 rounded-xl text-primary"><CalendarIcon className="w-5 h-5" /></div>
+                        <span>Viewing Requests</span>
+                    </div>
+                    <div className="bg-primary text-white text-[10px] px-2 py-0.5 rounded-full">NEW</div>
+                 </button>
+                 
+                 <div className="bg-white rounded-[40px] p-8 text-center space-y-6 shadow-xl shadow-black/5 border border-border-soft">
+                    <div className="w-16 h-16 bg-primary/10 rounded-3xl flex items-center justify-center mx-auto text-primary">
+                        <PlusCircleIcon className="w-8 h-8" />
+                    </div>
+                    <h2 className="text-2xl font-bold font-heading">Ready to rent?</h2>
+                    <p className="text-sm text-text-secondary leading-relaxed">Reach thousands of house hunters across Malawi in minutes.</p>
+                    <button onClick={() => setCurrentScreen(Screen.ADD_LISTING)} className="w-full bg-primary text-white py-5 rounded-[24px] font-bold shadow-2xl shadow-primary/30 transition-transform active:scale-95 flex items-center justify-center gap-3">
+                        <PlusCircleIcon className="w-6 h-6" /> LIST NEW PROPERTY
+                    </button>
+                 </div>
+                 
+                 <button onClick={() => setCurrentScreen(Screen.MANAGE_LISTINGS)} className="w-full p-4 bg-white rounded-[24px] text-text-secondary font-bold text-xs uppercase tracking-widest border border-border-soft shadow-sm flex items-center justify-center gap-2">
+                    <ListIcon className="w-4 h-4" /> Manage All Units
+                 </button>
+             </div>
+        </div>
+     );
+};
+
+export const AddListingScreen: React.FC = () => {
+    const { setCurrentScreen } = useAppContext();
+    const [title, setTitle] = useState('');
+    const [desc, setDesc] = useState('');
+    const [price, setPrice] = useState('');
+    const [loc, setLoc] = useState('');
+    const [beds, setBeds] = useState('');
+    const [baths, setBaths] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [images, setImages] = useState<string[]>([]);
+    const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
+    const fileRef = useRef<HTMLInputElement>(null);
+
+    const toggleAmenity = (name: string) => {
+        setSelectedAmenities(prev => prev.includes(name) ? prev.filter(a => a !== name) : [...prev, name]);
+    };
+
+    const handlePost = async () => {
+        if (!title || !price || !loc || images.length === 0) { alert("Please complete all main fields and add a photo."); return; }
+        setLoading(true);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error("Not logged in");
+            
+            const mainImg = await uploadImageToSupabase(images[0]);
+            const { error } = await supabase.from('listings').insert({
+                title, 
+                description: desc, 
+                price: parseFloat(price), 
+                price_type: 'per month',
+                location: loc, 
+                category: ListingCategory.HOUSE_RENTAL, 
+                image_url: mainImg, 
+                seller_id: user.id, 
+                seller_name: user.email?.split('@')[0] || 'Malawi Agent', 
+                status: 'Available',
+                bedrooms: parseInt(beds) || 0,
+                bathrooms: parseInt(baths) || 0,
+                amenities: selectedAmenities,
+                is_verified: true 
+            });
+            if (error) throw error;
+            setCurrentScreen(Screen.DASHBOARD);
+        } catch (e: any) { alert("Failed to post: " + e.message); }
+        finally { setLoading(false); }
+    };
 
     return (
-        <div className="flex flex-col h-full bg-secondary">
-             <div className="p-4 sticky top-0 bg-secondary/80 backdrop-blur-sm z-10 border-b border-border-soft">
-                <h1 className="font-heading text-xl font-semibold text-text-primary">{title}</h1>
-            </div>
-            <div className="flex-grow overflow-y-auto p-4 scrollbar-hide">
-                <div className="grid grid-cols-3 gap-4 mb-6">
-                    {stats.map(stat => (
-                        <div key={stat.label} className="bg-white p-4 rounded-lg shadow-sm text-center">
-                            <p className="text-2xl font-bold font-heading text-primary">{stat.value}</p>
-                            <p className="text-xs text-text-secondary">{stat.label}</p>
-                        </div>
-                    ))}
+        <div className="flex flex-col h-full bg-white overflow-hidden">
+            <Header title="New Listing" onBack={() => setCurrentScreen(Screen.DASHBOARD)} />
+            <div className="flex-grow overflow-y-auto p-6 space-y-8 pb-32 scrollbar-hide">
+                <div className="space-y-4">
+                    <label className="text-[10px] font-bold uppercase text-text-secondary tracking-widest">Media Upload</label>
+                    <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+                        {images.map((img, i) => (
+                            <div key={i} className="relative shrink-0 transition-all hover:rotate-2">
+                                <img src={img} className="w-28 h-28 rounded-[24px] object-cover shadow-xl border-4 border-white" />
+                                <button onClick={() => setImages(images.filter((_, idx) => idx !== i))} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg border-2 border-white">X</button>
+                            </div>
+                        ))}
+                        <button onClick={() => fileRef.current?.click()} className="w-28 h-28 bg-secondary border-4 border-dashed border-border-soft rounded-[24px] flex flex-col items-center justify-center text-gray-400 hover:text-primary hover:border-primary transition-all gap-2">
+                            <CameraIcon className="w-8 h-8" />
+                            <span className="text-[10px] font-bold">ADD PHOTO</span>
+                        </button>
+                        <input type="file" hidden ref={fileRef} onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (ev) => setImages([...images, ev.target?.result as string]);
+                                reader.readAsDataURL(file);
+                            }
+                        }} />
+                    </div>
                 </div>
 
-                <div className="mb-6">
-                    <h2 className="font-heading text-lg font-semibold text-text-primary mb-3">Quick Actions</h2>
-                    <Button onClick={() => setCurrentScreen(Screen.ADD_LISTING)} variant="outline">
-                        + Post a New Ad
-                    </Button>
+                <div className="space-y-6">
+                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-text-secondary tracking-widest">Title</label><input value={title} onChange={e => setTitle(e.target.value)} type="text" className="w-full border-b-2 border-border-soft py-4 outline-none focus:border-primary transition-colors font-bold text-xl" placeholder="E.g. 3 Bedroom House in Area 10" /></div>
+                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-text-secondary tracking-widest">Location</label><input value={loc} onChange={e => setLoc(e.target.value)} type="text" className="w-full border-b-2 border-border-soft py-4 outline-none focus:border-primary transition-colors font-bold text-xl" placeholder="City, Area Name" /></div>
+                    <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-text-secondary tracking-widest">Rent (MK)</label><input value={price} onChange={e => setPrice(e.target.value)} type="number" className="w-full border-b-2 border-border-soft py-4 outline-none focus:border-primary transition-colors font-bold text-xl" placeholder="350000" /></div>
+                        <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-text-secondary tracking-widest">Bedrooms</label><input value={beds} onChange={e => setBeds(e.target.value)} type="number" className="w-full border-b-2 border-border-soft py-4 outline-none focus:border-primary transition-colors font-bold text-xl" placeholder="3" /></div>
+                    </div>
                 </div>
 
-                <div>
-                    <h2 className="font-heading text-lg font-semibold text-text-primary mb-3">Action Required</h2>
-                    <div className="bg-white rounded-lg shadow-sm">
-                        {actionItems.map((item, index) => (
-                            <button key={item.id} onClick={() => setCurrentScreen(Screen.MESSAGES)} className={`w-full flex items-center p-3 text-left ${index < actionItems.length - 1 ? 'border-b border-border-soft' : ''}`}>
-                                <div className="p-2 bg-yellow-100 rounded-full mr-3">
-                                    <item.icon className="w-5 h-5 text-yellow-600" />
-                                </div>
-                                <div className="flex-grow overflow-hidden">
-                                    <p className="text-sm text-text-primary truncate">{item.text}</p>
-                                </div>
-                                <ChevronRightIcon className="w-5 h-5 text-text-secondary flex-shrink-0 ml-2" />
+                <div className="space-y-4">
+                    <label className="text-[10px] font-bold uppercase text-text-secondary tracking-widest">Property Amenities</label>
+                    <div className="grid grid-cols-2 gap-3">
+                        {['Solar Backup', 'Borehole', 'Electric Fence', 'Secured Compound'].map((amenity, i) => (
+                            <button key={i} onClick={() => toggleAmenity(amenity)} className={`p-4 rounded-[20px] text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-2 border-2 ${selectedAmenities.includes(amenity) ? 'bg-primary/5 text-primary border-primary' : 'bg-white text-gray-400 border-border-soft'}`}>
+                                {amenity}
                             </button>
                         ))}
                     </div>
                 </div>
-            </div>
-        </div>
-    );
-};
 
-export const AddListingScreen: React.FC = () => {
-    const { setCurrentScreen, listingToEdit, setListingToEdit } = useAppContext();
-    const isEditMode = !!listingToEdit;
-
-    const [category, setCategory] = useState<ListingCategory>(ListingCategory.HOUSE_RENTAL);
-    const [title, setTitle] = useState('');
-    const [description, setDescription] = useState('');
-    const [price, setPrice] = useState('');
-    const [location, setLocation] = useState('');
-    const [bedrooms, setBedrooms] = useState('');
-    const [bathrooms, setBathrooms] = useState('');
-
-    useEffect(() => {
-        if (listingToEdit) {
-            setTitle(listingToEdit.title);
-            setDescription(listingToEdit.description);
-            setPrice(listingToEdit.price.toString());
-            setLocation(listingToEdit.location);
-            setBedrooms(listingToEdit.bedrooms?.toString() || '');
-            setBathrooms(listingToEdit.bathrooms?.toString() || '');
-            setCategory(listingToEdit.category);
-        } else {
-            // Reset form
-            setTitle(''); setDescription(''); setPrice(''); setLocation(''); setBedrooms(''); setBathrooms('');
-            setCategory(ListingCategory.HOUSE_RENTAL);
-        }
-    }, [listingToEdit]);
-
-    const handleBack = () => {
-        setListingToEdit(null);
-        setCurrentScreen(isEditMode ? Screen.MANAGE_LISTINGS : Screen.DASHBOARD);
-    };
-
-    const handleSubmit = () => {
-        alert(isEditMode ? 'Listing Updated!' : 'Listing Submitted!');
-        setListingToEdit(null);
-        setCurrentScreen(Screen.MANAGE_LISTINGS);
-    };
-    
-    const showPropertyFields = [ListingCategory.HOUSE_RENTAL, ListingCategory.HOUSE_SALE, ListingCategory.BEDROOM_RENTAL].includes(category);
-    
-    return (
-        <div className="flex flex-col h-full bg-secondary">
-            <Header title={isEditMode ? "Edit Listing" : "Create New Listing"} onBack={handleBack} />
-            <div className="flex-grow overflow-y-auto p-4 scrollbar-hide">
-                <div className="mb-4">
-                    <label htmlFor="category" className="block text-sm font-medium text-text-secondary mb-1">Category</label>
-                    <div className="relative">
-                        <select
-                            id="category"
-                            value={category}
-                            onChange={e => setCategory(e.target.value as ListingCategory)}
-                            className="w-full px-4 py-3 rounded-lg border border-border-soft focus:ring-primary focus:border-primary bg-white appearance-none"
-                            disabled={isEditMode}
-                        >
-                            {Object.values(ListingCategory).map(cat => (
-                                <option key={cat} value={cat}>{cat}</option>
-                            ))}
-                        </select>
-                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                            <ChevronDownIcon className="w-5 h-5" />
-                        </div>
-                    </div>
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-text-secondary tracking-widest">Full Description</label>
+                    <textarea value={desc} onChange={e => setDesc(e.target.value)} className="w-full bg-secondary p-5 rounded-[24px] outline-none resize-none h-40 font-medium text-sm focus:ring-2 focus:ring-primary/20 transition-all" placeholder="Mention features like back yard, distance from main road, security details..." />
                 </div>
-
-                <InputField label="Title" id="title" type="text" placeholder="e.g., Slightly Used Dell Laptop" value={title} onChange={e => setTitle(e.target.value)} />
-                <TextAreaField label="Description" id="description" placeholder="Describe the item..." value={description} onChange={e => setDescription(e.target.value)} />
-                <InputField label="Price (MK)" id="price" type="number" placeholder="350000" value={price} onChange={e => setPrice(e.target.value)} />
-                <InputField label="Location" id="location" type="text" placeholder="Blantyre, Malawi" value={location} onChange={e => setLocation(e.target.value)} />
                 
-                {showPropertyFields && (
-                    <div className="grid grid-cols-2 gap-4">
-                        <InputField label="Bedrooms" id="bedrooms" type="number" placeholder="3" value={bedrooms} onChange={e => setBedrooms(e.target.value)} />
-                        <InputField label="Bathrooms" id="bathrooms" type="number" placeholder="2" value={bathrooms} onChange={e => setBathrooms(e.target.value)} />
-                    </div>
-                )}
-                
-                <div className="mb-6">
-                    <label className="block text-sm font-medium text-text-secondary mb-2">Photos</label>
-                    <div className="border-2 border-dashed border-border-soft rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50">
-                        <CameraIcon className="w-10 h-10 mx-auto text-gray-400 mb-2"/>
-                        <p className="text-sm text-text-secondary">Tap to upload photos</p>
-                        <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
-                    </div>
+                <div className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-md border-t border-border-soft z-50 max-w-sm mx-auto">
+                    <Button onClick={handlePost} disabled={loading} className="py-5 rounded-[24px] shadow-2xl shadow-primary/40">
+                        {loading ? <LoaderIcon className="animate-spin mx-auto w-6 h-6" /> : 'PUBLISH LISTING'}
+                    </Button>
                 </div>
-
-                <Button onClick={handleSubmit}>{isEditMode ? 'Save Changes' : 'Submit Listing'}</Button>
-            </div>
-        </div>
-    );
-};
-
-interface ListingManagementCardProps {
-    listing: Listing;
-    onViewListing: (listing: Listing) => void;
-    onEdit: () => void;
-}
-
-const ListingManagementCard: React.FC<ListingManagementCardProps> = ({ listing, onViewListing, onEdit }) => {
-    const statusStyles: { [key in Listing['status']]: string } = {
-        Available: 'bg-green-100 text-green-800',
-        Rented: 'bg-red-100 text-red-800',
-        Pending: 'bg-yellow-100 text-yellow-800',
-        'Under Maintenance': 'bg-blue-100 text-blue-800',
-        Sold: 'bg-gray-100 text-gray-800',
-    };
-    
-    return (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden mb-4">
-            <div className="flex">
-                <img src={listing.imageUrl} alt={listing.title} className="w-28 h-28 object-cover" />
-                <div className="p-3 flex-grow">
-                     <div className="flex justify-between items-start">
-                        <h3 className="font-heading text-base font-semibold text-text-primary pr-2">{listing.title}</h3>
-                        <span className={`text-xs font-semibold px-2 py-0.5 mt-0.5 rounded-full ${statusStyles[listing.status]}`}>
-                            {listing.status}
-                        </span>
-                    </div>
-                    <p className="font-heading text-primary font-bold text-sm my-1">MK {listing.price.toLocaleString()}</p>
-                    <div className="flex items-center text-text-secondary text-xs">
-                        <MapPinIcon className="w-3 h-3 mr-1" />
-                        <span>{listing.location}</span>
-                    </div>
-                </div>
-            </div>
-            <div className="border-t border-border-soft flex">
-                <button onClick={() => onViewListing(listing)} className="flex-1 p-2 text-center text-sm font-semibold text-primary hover:bg-primary/10">View Listing</button>
-                <button onClick={onEdit} className="flex-1 p-2 border-l border-border-soft text-center text-sm font-semibold text-text-secondary hover:bg-gray-100">Edit</button>
-            </div>
-        </div>
-    );
-};
-
-export const ManageListingsScreen: React.FC = () => {
-    const { setCurrentScreen, setSelectedListing, setListingToEdit } = useAppContext();
-
-    const handleViewListing = (listing: Listing) => {
-        setSelectedListing(listing);
-        setCurrentScreen(Screen.LISTING_DETAILS);
-    };
-
-    const handleEdit = (listing: Listing) => {
-        setListingToEdit(listing);
-        setCurrentScreen(Screen.ADD_LISTING);
-    };
-
-    // Mock: Assume logged in seller is ID 1
-    const mylistings = MOCK_LISTINGS.filter(p => p.sellerId === 1); 
-
-    return (
-        <div className="flex flex-col h-full bg-secondary">
-             <div className="p-4 sticky top-0 bg-secondary/80 backdrop-blur-sm z-10 border-b border-border-soft">
-                <h1 className="font-heading text-xl font-semibold text-text-primary">My Listings</h1>
-            </div>
-            <div className="flex-grow overflow-y-auto p-4 scrollbar-hide">
-                {mylistings.map(listing => <ListingManagementCard key={listing.id} listing={listing} onViewListing={handleViewListing} onEdit={() => handleEdit(listing)} />)}
-            </div>
-            <div className="absolute bottom-20 right-4">
-                <button onClick={() => setCurrentScreen(Screen.ADD_LISTING)} className="bg-primary text-white p-4 rounded-full shadow-lg hover:bg-green-700 transition-transform hover:scale-110">
-                    <PlusCircleIcon className="w-6 h-6" />
-                </button>
             </div>
         </div>
     );
@@ -1394,33 +1217,18 @@ export const NotificationsScreen: React.FC = () => {
     const { setCurrentScreen } = useAppContext();
     return (
         <div className="flex flex-col h-full bg-secondary">
-            <Header title="Notifications" onBack={() => setCurrentScreen(Screen.HOME_SCREEN)} />
-            <div className="flex-grow overflow-y-auto scrollbar-hide">
-                {MOCK_NOTIFICATIONS.length > 0 ? (
-                    <div className="divide-y divide-border-soft">
-                        {MOCK_NOTIFICATIONS.map(notif => (
-                            <div key={notif.id} className="p-4 flex items-start hover:bg-gray-50">
-                                <div className="p-2 bg-primary/10 rounded-full mr-4">
-                                    <BellIcon className="w-5 h-5 text-primary" />
-                                </div>
-                                <div className="flex-grow">
-                                    <div className="flex justify-between items-center">
-                                        <p className="font-semibold text-text-primary">{notif.title}</p>
-                                        <p className="text-xs text-text-secondary">{notif.timestamp}</p>
-                                    </div>
-                                    <p className="text-sm text-text-secondary mt-1">{notif.body}</p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-center text-text-secondary">
-                        <BellIcon className="w-16 h-16 mb-4 text-gray-300" />
-                        <h2 className="font-heading text-xl font-semibold">No Notifications</h2>
-                        <p className="mt-2">You're all caught up!</p>
-                    </div>
-                )}
-            </div>
+            <Header title="Alerts" onBack={() => setCurrentScreen(Screen.HOME_SCREEN)} />
+             <div className="p-4 space-y-4">
+                 <div className="bg-white p-6 rounded-[32px] shadow-sm border border-border-soft relative overflow-hidden">
+                     <div className="absolute top-0 right-0 w-20 h-20 bg-primary/5 rounded-full -mr-10 -mt-10"></div>
+                     <div className="flex items-center gap-3 mb-3">
+                         <div className="w-2.5 h-2.5 bg-primary rounded-full animate-pulse shadow-[0_0_8px_rgba(0,102,255,0.8)]"></div>
+                         <h4 className="font-bold text-primary tracking-tight">System Update</h4>
+                     </div>
+                     <p className="text-sm text-text-secondary font-medium leading-relaxed">Property verification is now active! Look for the blue shield to find trusted agents.</p>
+                     <p className="text-[9px] font-bold text-gray-300 mt-4 uppercase tracking-widest tracking-tighter">NYUMBANOW MALAWi • 2 HOURS AGO</p>
+                 </div>
+             </div>
         </div>
     );
 };
@@ -1429,18 +1237,13 @@ export const RulesAndPoliciesScreen: React.FC = () => {
     const { setCurrentScreen } = useAppContext();
     return (
         <div className="flex flex-col h-full bg-secondary">
-            <Header title="Rules & Policies" onBack={() => setCurrentScreen(Screen.PROFILE)} />
-            <div className="flex-grow overflow-y-auto p-6 prose prose-sm max-w-none scrollbar-hide">
-                <h2 className="font-heading font-semibold">Community Guidelines</h2>
-                <p>Welcome to MarketPaLine. To ensure a safe and respectful community, we require all users to adhere to the following guidelines...</p>
-                <h3>1. Be Respectful</h3>
-                <p>Treat all users with courtesy and professionalism. Harassment, discrimination, or hate speech will not be tolerated.</p>
-                <h3>2. Provide Accurate Information</h3>
-                <p>Ensure all listings, personal details, and communications are truthful and accurate. Misrepresentation can lead to account suspension.</p>
-                <h3>3. No Scamming or Fraud</h3>
-                <p>Any attempts at fraudulent activities, including fake listings or phishing attempts, will result in an immediate ban and may be reported to law enforcement.</p>
-                 <h2 className="font-heading font-semibold mt-6">Terms of Service</h2>
-                <p>By using MarketPaLine, you agree to our full terms of service. This includes agreements regarding payments, disputes, and data privacy...</p>
+            <Header title="Safety Guide" onBack={() => setCurrentScreen(Screen.PROFILE)} />
+            <div className="p-6 space-y-6">
+                <div className="bg-white p-8 rounded-[40px] shadow-sm space-y-4">
+                    <div className="p-3 bg-red-50 text-red-500 rounded-2xl w-fit"><ShieldCheckIcon className="w-8 h-8" /></div>
+                    <h3 className="font-bold text-xl font-heading text-red-600">Avoid Scams</h3>
+                    <p className="text-sm text-text-secondary leading-relaxed font-medium">1. Never pay viewing fees unless you trust the agent.<br/>2. Always visit the property in person.<br/>3. Verify ID of the agent/landlord before signing.<br/>4. Pay through traceable bank transfers where possible.</p>
+                </div>
             </div>
         </div>
     );
@@ -1448,23 +1251,13 @@ export const RulesAndPoliciesScreen: React.FC = () => {
 
 export const SettingsScreen: React.FC = () => {
     const { setCurrentScreen } = useAppContext();
-    const settingsItems = [
-        { label: 'Notifications', icon: BellIcon, action: () => setCurrentScreen(Screen.NOTIFICATIONS) },
-        { label: 'Privacy & Security', icon: UserIcon, action: () => alert('Privacy & Security settings coming soon!') },
-        { label: 'Help & Support', icon: InfoIcon, action: () => alert('Help & Support section coming soon!') },
-    ];
     return (
         <div className="flex flex-col h-full bg-secondary">
             <Header title="Settings" onBack={() => setCurrentScreen(Screen.PROFILE)} />
-            <div className="flex-grow overflow-y-auto scrollbar-hide p-4">
-                 <div className="bg-white rounded-lg shadow-sm">
-                    {settingsItems.map((item, index) => (
-                         <button key={item.label} onClick={item.action} className={`w-full flex items-center p-4 text-left ${index < settingsItems.length - 1 ? 'border-b border-border-soft' : ''}`}>
-                            <item.icon className="w-6 h-6 mr-4 text-primary" />
-                            <span className="flex-grow font-semibold text-text-primary">{item.label}</span>
-                            <ChevronRightIcon className="w-5 h-5 text-text-secondary" />
-                        </button>
-                    ))}
+            <div className="p-6">
+                <div className="bg-white p-8 rounded-[40px] shadow-sm space-y-8">
+                    <div className="flex justify-between items-center"><span className="font-bold text-lg">Push Notifications</span><div className="w-14 h-7 bg-primary rounded-full relative p-1 transition-all"><div className="w-5 h-5 bg-white rounded-full absolute right-1"></div></div></div>
+                    <div className="flex justify-between items-center opacity-50"><span className="font-bold text-lg">Dark Mode</span><div className="w-14 h-7 bg-gray-200 rounded-full relative p-1 transition-all"><div className="w-5 h-5 bg-white rounded-full"></div></div></div>
                 </div>
             </div>
         </div>
@@ -1475,43 +1268,93 @@ export const AboutScreen: React.FC = () => {
     const { setCurrentScreen } = useAppContext();
     return (
         <div className="flex flex-col h-full bg-secondary">
-            <Header title="About MarketPaLine" onBack={() => setCurrentScreen(Screen.PROFILE)} />
-            <div className="flex-grow p-6 text-center flex flex-col items-center justify-center">
-                <MarketPaLineLogo className="w-20 h-20 text-primary mb-4" />
-                <h1 className="text-3xl font-bold font-heading text-text-primary">MarketPaLine</h1>
-                <p className="text-sm text-text-secondary mt-1">Version 2.0.0</p>
-                <p className="mt-6 max-w-xs">
-                    MarketPaLine is a modern marketplace for Malawi, connecting people to buy, sell, and rent goods and services.
-                </p>
-                <p className="text-xs text-gray-400 mt-12">© 2024 MarketPaLine. All rights reserved.</p>
-            </div>
+             <Header title="Our Story" onBack={() => setCurrentScreen(Screen.PROFILE)} />
+             <div className="flex-grow flex flex-col items-center justify-center p-12 text-center">
+                 <NyumbaNowLogo className="text-primary w-28 h-28 mb-8" />
+                 <h2 className="text-3xl font-bold mb-3 font-heading tracking-tight">NyumbaNow</h2>
+                 <p className="text-text-secondary font-medium leading-relaxed italic">The most modern way to find a home in the Heart of Africa.</p>
+                 <div className="mt-16 space-y-3">
+                     <p className="text-[10px] font-bold text-text-secondary uppercase tracking-[4px]">Serving Malawi</p>
+                     <p className="text-xs font-bold text-primary">Lilongwe • Blantyre • Mzuzu</p>
+                 </div>
+                 <p className="mt-24 text-[10px] text-gray-300 font-bold uppercase tracking-widest">v2.0.1 Stable Build</p>
+             </div>
         </div>
     );
 };
 
 export const EditProfileScreen: React.FC = () => {
     const { setCurrentScreen } = useAppContext();
+    return (
+        <div className="flex flex-col h-full bg-white">
+            <Header title="Edit Profile" onBack={() => setCurrentScreen(Screen.PROFILE)} />
+            <div className="p-10 flex flex-col items-center space-y-12">
+                <div className="relative">
+                    <div className="w-40 h-40 bg-secondary rounded-[48px] flex items-center justify-center border-8 border-white shadow-2xl overflow-hidden group">
+                        <UserIcon className="w-16 h-16 text-gray-300 group-hover:scale-110 transition-transform" />
+                    </div>
+                    <button className="absolute -bottom-4 -right-4 bg-primary text-white p-4 rounded-[20px] shadow-2xl border-4 border-white transition-transform active:scale-90"><CameraIcon className="w-6 h-6" /></button>
+                </div>
+                <div className="w-full space-y-8">
+                    <div className="space-y-2"><label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">Full Name</label><input type="text" className="w-full border-b-2 border-border-soft py-3 outline-none font-bold text-xl focus:border-primary transition-colors" defaultValue="NyumbaNow User" /></div>
+                    <div className="space-y-2"><label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">Phone Number</label><input type="tel" className="w-full border-b-2 border-border-soft py-3 outline-none font-bold text-xl focus:border-primary transition-colors" defaultValue="+265 999 000 000" /></div>
+                </div>
+                <Button onClick={() => setCurrentScreen(Screen.PROFILE)} className="py-5 rounded-[24px] shadow-2xl shadow-primary/30">SAVE ALL CHANGES</Button>
+            </div>
+        </div>
+    );
+};
+
+export const ManageListingsScreen: React.FC = () => {
+    const { setCurrentScreen, setSelectedListing } = useAppContext();
+    const [myListings, setMyListings] = useState<Listing[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchMine = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            const { data } = await supabase.from('listings').select('*').eq('seller_id', user.id);
+            if (data) setMyListings(data.map(i => ({ 
+                ...i, 
+                priceType: i.price_type, 
+                imageUrl: i.image_url, 
+                sellerId: i.seller_id, 
+                sellerName: i.seller_name,
+                isVerified: true
+            })));
+            setLoading(false);
+        };
+        fetchMine();
+    }, []);
 
     return (
         <div className="flex flex-col h-full bg-secondary">
-            <Header title="Edit Profile" onBack={() => setCurrentScreen(Screen.PROFILE)} />
-            <div className="flex-grow overflow-y-auto p-4 scrollbar-hide">
-                <div className="flex flex-col items-center mb-6">
-                    <div className="w-24 h-24 rounded-full bg-gray-300 mb-4 flex items-center justify-center relative group">
-                         <UserIcon className="w-12 h-12 text-gray-500" />
-                         <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                            <CameraIcon className="w-8 h-8 text-white" />
-                         </div>
+             <Header title="My Property List" onBack={() => setCurrentScreen(Screen.DASHBOARD)} />
+             <div className="p-4 flex-grow overflow-y-auto scrollbar-hide">
+                 {loading ? <div className="flex justify-center p-20"><LoaderIcon className="animate-spin text-primary" /></div> : myListings.length > 0 ? (
+                     myListings.map(l => (
+                        <div key={l.id} className="relative">
+                            <ListingCard listing={l} onClick={() => {}} />
+                            {!l.is_promoted && (
+                                <button 
+                                    onClick={() => { setSelectedListing(l); setCurrentScreen(Screen.BOOST_LISTING); }}
+                                    className="absolute top-4 right-4 bg-amber-400 text-white p-2 rounded-xl shadow-lg flex items-center gap-1 font-bold text-[10px]"
+                                >
+                                    <SunIcon className="w-4 h-4" /> BOOST
+                                </button>
+                            )}
+                        </div>
+                     ))
+                 ) : (
+                    <div className="p-12 text-center text-text-secondary pt-24 bg-white rounded-[40px] border border-border-soft m-4">
+                        <HouseIcon className="w-12 h-12 text-gray-100 mx-auto mb-4" />
+                        <h3 className="font-bold text-lg">No Listings</h3>
+                        <p className="text-sm mt-2 mb-6">You haven't added any properties for rent yet.</p>
+                        <button onClick={() => setCurrentScreen(Screen.ADD_LISTING)} className="text-primary font-bold text-xs uppercase tracking-widest">Create First Listing</button>
                     </div>
-                </div>
-                <InputField label="Full Name" id="fullName" type="text" defaultValue="John Doe" />
-                <InputField label="Email Address" id="email" type="email" defaultValue="example@email.com" />
-                <InputField label="Phone Number" id="phone" type="tel" defaultValue="+256 123 456 789" />
-
-                <div className="mt-6">
-                    <Button onClick={() => setCurrentScreen(Screen.PROFILE)}>Save Changes</Button>
-                </div>
-            </div>
+                 )}
+             </div>
         </div>
     );
 };
